@@ -35,7 +35,7 @@ cd /tmp && read -p "Input branch name: " BRANCH && \
  [ "${V,,}" == "v" ] && ./i.sh "$BRANCH" || echo "Hash was NOT accepted by the user"
 ```
 
-### 4. Setup script will further download and install kira management tool 
+### 4. Setup script will further download and install kira management tool
 
 ### 5. By typing kira in the terminal user will have ability to deploy, scale and manage his infrastructure
 
@@ -62,3 +62,38 @@ KIRA_FRONTEND_DNS="fontend.servicenet.local"
 ### 2. Full Node Mode
 
 ### 3. Validator Mode
+
+## How to interact with sekaid using console
+
+1. updating validator information
+
+2. creating proposal to add new validator
+
+```
+sekaid keys add val2 --keyring-backend=test --home=$SEKAID_HOME
+
+sekaid tx customgov permission whitelist-permission --from validator --keyring-backend=test --permission=4 --addr=$(sekaid keys show -a validator --keyring-backend=test --home=$SEKAID_HOME) --chain-id=testing --fees=100ukex --home=$SEKAID_HOME --yes
+
+sekaid tx customgov permission whitelist-permission --from validator --keyring-backend=test --permission=5 --addr=$(sekaid keys show -a validator --keyring-backend=test --home=$SEKAID_HOME) --chain-id=testing --fees=100ukex --home=$SEKAID_HOME --yes
+
+sekaid tx customgov proposal assign-permission 2 --addr=$(sekaid keys show -a validator --keyring-backend=test --home=$SEKAID_HOME) --from=validator --keyring-backend=test --home=$SEKAID_HOME --chain-id=testing --fees=100ukex --yes
+```
+
+3. voting on the proposal to add new validator
+
+```
+sekaid query customgov proposals
+
+sekaid tx customgov proposal vote 1 1 --from validator --keyring-backend=test --home=$SEKAID_HOME --chain-id=testing --fees=100ukex --yes
+```
+
+4. creating validator after proposal passed
+
+```
+
+validatorKey=$(sekaid val-address $(sekaid keys show -a validator --keyring-backend=test))
+
+sekaid tx claim-validator-seat --from validator --keyring-backend=test --home=$SEKAID_HOME --validator-key=$validatorKey --moniker="validator" --chain-id=testing --fees=100ukex --yes
+```
+
+5. making token transactions in different currencies
