@@ -19,6 +19,7 @@ KIRA_HOME="/home/$KIRA_USER"
 KIRA_DUMP="$KIRA_HOME/dump"
 KIRA_SNAP="$KIRA_HOME/snap"
 KIRA_SECRETS="$KIRA_HOME/.secrets"
+KIRA_CONFIGS="$KIRA_HOME/.kira"
 SETUP_LOG="$KIRA_DUMP/setup.log"
 
 CDHELPER_VERSION="v0.6.50"
@@ -38,7 +39,7 @@ echo "| ARCHITECTURE: $ARCHITECTURE"
 echo "------------------------------------------------"
 
 rm -rfv $KIRA_DUMP
-mkdir -p "$KIRA_DUMP" "$KIRA_SNAP"
+mkdir -p "$KIRA_DUMP" "$KIRA_SNAP" "$KIRA_CONFIGS" "$KIRA_SECRETS"
 
 set +x
 if [ -z "$SKIP_UPDATE" ]; then
@@ -74,6 +75,21 @@ fi
 
 echo ""
 set -x
+
+CPU_CORES=$(cat /proc/cpuinfo | grep processor | wc -l || echo "0")
+RAM_MEMORY=$(grep MemTotal /proc/meminfo | awk '{print $2}' || echo "0")
+
+if [ $CPU_CORES -lt 2 ] ; then
+    echo "ERROR: KIRA Manager requires at lest 2 CPU cores but your machine has only $CPU_CORES"
+    echo "INFO: Recommended CPU is 4 cores"
+    exit 1
+fi
+
+if [ $RAM_MEMORY -lt 3145728 ] ; then
+    echo "ERROR: KIRA Manager requires at lest 4 GB RAM but your machine has only $RAM_MEMORY kB"
+    echo "INFO: Recommended RAM is 8GB"
+    exit 1
+fi
 
 [ -z "$SEKAI_BRANCH" ] && SEKAI_BRANCH="master"
 [ -z "$FRONTEND_BRANCH" ] && FRONTEND_BRANCH="master"
@@ -118,7 +134,7 @@ if [ "${SKIP_UPDATE,,}" != "true" ]; then
     rm -rfv $KIRA_DUMP
     mkdir -p "$KIRA_DUMP/INFRA/manager"
 
-    ESSENTIALS_HASH=$(echo "$SETUP_VER-$CDHELPER_VERSION-$KIRA_HOME-$INFRA_BRANCH-$INFRA_REPO-$ARCHITECTURE-1" | md5sum | awk '{ print $1 }' || echo "")
+    ESSENTIALS_HASH=$(echo "$SETUP_VER-$CDHELPER_VERSION-$KIRA_HOME-$INFRA_BRANCH-$INFRA_REPO-$ARCHITECTURE-2" | md5sum | awk '{ print $1 }' || echo "")
     KIRA_SETUP_ESSSENTIALS="$KIRA_SETUP/essentials-$ESSENTIALS_HASH"
     if [ ! -f "$KIRA_SETUP_ESSSENTIALS" ]; then
         echo "INFO: Installing Essential Packages & Env Variables..."
@@ -181,6 +197,7 @@ if [ "${SKIP_UPDATE,,}" != "true" ]; then
         CDHelper text lineswap --insert="KIRA_DUMP=$KIRA_DUMP" --prefix="KIRA_DUMP=" --path=$ETC_PROFILE --append-if-found-not=True
         CDHelper text lineswap --insert="KIRA_SNAP=$KIRA_SNAP" --prefix="KIRA_SNAP=" --path=$ETC_PROFILE --append-if-found-not=True
         CDHelper text lineswap --insert="KIRA_SECRETS=$KIRA_SECRETS" --prefix="KIRA_SECRETS=" --path=$ETC_PROFILE --append-if-found-not=True
+        CDHelper text lineswap --insert="KIRA_CONFIGS=$KIRA_CONFIGS" --prefix="KIRA_CONFIGS=" --path=$ETC_PROFILE --append-if-found-not=True
 
         CDHelper text lineswap --insert="KIRA_MANAGER=$KIRA_MANAGER" --prefix="KIRA_MANAGER=" --path=$ETC_PROFILE --append-if-found-not=True
         CDHelper text lineswap --insert="KIRA_REPOS=$KIRA_REPOS" --prefix="KIRA_REPOS=" --path=$ETC_PROFILE --append-if-found-not=True
