@@ -2,13 +2,10 @@
 set +e && source "/etc/profile" &>/dev/null && set -e
 # quick edit: FILE="$KIRA_MANAGER/kira/kira-networking.sh" && rm $FILE && nano $FILE && chmod 555 $FILE
 
-CONTAINER_NAME=$1
-WHITESPACE="                                                     "
-
 # ports have 3 diffrent configuration states, public, disabled & custom
 [ -z "$PORTS_EXPOSURE" ] && PORTS_EXPOSURE="enabled"
-
-PORTS=( "$KIRA_FRONTEND_PORT" "$KIRA_SENTRY_GRPC_PORT" "$KIRA_INTERX_PORT" "$KIRA_SENTRY_P2P_PORT" "$KIRA_SENTRY_RPC_PORT" "$KIRA_PRIV_SENTRY_P2P_PORT" )
+WHITESPACE="                                                     "
+PORTS=($KIRA_FRONTEND_PORT $KIRA_SENTRY_GRPC_PORT $KIRA_SENTRY_P2P_PORT $KIRA_SENTRY_RPC_PORT $KIRA_PRIV_SENTRY_P2P_PORT $KIRA_INTERX_PORT)
 
 PORT_CFG_DIR="$KIRA_CONFIGS/ports/$PORT"
 PUBLIC_PEERS="$KIRA_CONFIGS/public_peers"
@@ -19,7 +16,8 @@ mkdir -p "$PORT_CFG_DIR"
 touch "$PUBLIC_PEERS" "$PRIVATE_PEERS" "$PUBLIC_SEEDS" "$PRIVATE_SEEDS"
 
 while : ; do
-    clear
+    set +e && source "/etc/profile" &>/dev/null && set -e
+    printf "\033c"
     ALLOWED_OPTIONS="x"
 echo -e "\e[37;1m--------------------------------------------------"
            echo "|         KIRA NETWORKING MANAGER v0.0.1         |"
@@ -29,10 +27,10 @@ echo -e "\e[37;1m--------------------------------------------------"
            echo -e "|\e[0m\e[32;1m      ALL PORTS USE CUSTOM CONFIGURATION        \e[37;1m|"
            [ "${PORTS_EXPOSURE,,}" == "disabled" ] && \
            echo -e "|\e[0m\e[31;1m        ACCESS TO ALL PORTS IS DISABLED         \e[37;1m|"
-           echo "|--------- $(date '+%d/%m/%Y %H:%M:%S') ---------| [status]"
+           echo "|-------------- $(date '+%d/%m/%Y %H:%M:%S') -------------| [status]"
     i=-1
     LAST_SNAP=""
-    for p in $PORTS ; do
+    for p in "${PORTS[@]}" ; do
         i=$((i + 1))
         NAME=""
         [ "$p" == "$KIRA_SENTRY_GRPC_PORT" ] && NAME="Public Sentry" && TYPE="GRPC"
@@ -47,7 +45,7 @@ echo -e "\e[37;1m--------------------------------------------------"
         P_TMP="${p}${WHITESPACE}"
         NAME_TMP="${NAME}${WHITESPACE}"
         TYPE_TMP="${TYPE}${WHITESPACE}"
-        echo "| [$i] | ${TYPE_TMP:0:4} PORT ${P_TMP:0:5} - ${NAME_TMP:0:10} $PORT_EXPOSURE" && ALLOWED_OPTIONS="${ALLOWED_OPTIONS}${i}"
+        echo "| [$i] | ${TYPE_TMP:0:4} PORT ${P_TMP:0:5} - ${NAME_TMP:0:22} $PORT_EXPOSURE" && ALLOWED_OPTIONS="${ALLOWED_OPTIONS}${i}"
     done
        echo "|------------------------------------------------|"
        [ "${PORTS_EXPOSURE,,}" != "enabled" ] && \
@@ -56,12 +54,14 @@ echo -e "\e[37;1m--------------------------------------------------"
        echo "| [C] | Allow CUSTOM Configurationo of All Ports |" && ALLOWED_OPTIONS="${ALLOWED_OPTIONS}c"
        [ "${PORTS_EXPOSURE,,}" != "disabled" ] && \
        echo "| [D] | Force DISABLE All Ports                  |" && ALLOWED_OPTIONS="${ALLOWED_OPTIONS}d"
+       IFACE_TMP="(${IFACE})${WHITESPACE:0:10}|"
+       echo "| [I] | Change Network INTERFACE $IFACE_TMP"        && ALLOWED_OPTIONS="${ALLOWED_OPTIONS}i"
        echo "|------------------------------------------------|"
        echo "| [S] | Edit/Show SEED Nodes List                |" && ALLOWED_OPTIONS="${ALLOWED_OPTIONS}a"
        echo "| [P] | Edit/Show Persistent PEERS List          |" && ALLOWED_OPTIONS="${ALLOWED_OPTIONS}b"
-       echo "| [R] | RELOAD Network Settings${WHITESPACE:0:18}|" && ALLOWED_OPTIONS="${ALLOWED_OPTIONS}r"
+       echo "| [F] | Reload FIREWALL Settings${WHITESPACE:0:17}|" && ALLOWED_OPTIONS="${ALLOWED_OPTIONS}f"
+       echo "| [R] | RELOAD Networking ${WHITESPACE:0:23}|" && ALLOWED_OPTIONS="${ALLOWED_OPTIONS}r"
     echo -e "| [X] | Exit ___________________________________ |\e[0m"
-
     OPTION="" && read -s -n 1 -t 5 OPTION || OPTION=""
     [ -z "$OPTION" ] && continue
     [[ "${ALLOWED_OPTIONS,,}" != *"$OPTION"* ]] && continue
@@ -73,7 +73,7 @@ echo -e "\e[37;1m--------------------------------------------------"
     fi
 
     i=-1
-    for p in $PORTS; do
+    for p in "${PORTS[@]}" ; do
         i=$((i + 1))
         if [ "$OPTION" == "$i" ]; then
             echo "INFO: Starting port manager ($p)..."
@@ -93,6 +93,17 @@ echo -e "\e[37;1m--------------------------------------------------"
         echo "INFO: Enabling custom ports configuration..."
         PORTS_EXPOSURE="custom"
         CDHelper text lineswap --insert="PORTS_EXPOSURE=$PORTS_EXPOSURE" --prefix="PORTS_EXPOSURE=" --path=$ETC_PROFILE --append-if-found-not=True
+    elif [ "${OPTION,,}" == "i" ]; then
+        echo "INFO: Starting network interface selection menu..."
+        IFACE_OLD="$IFACE"
+        $KIRA_MANAGER/menu/interface-select.sh
+        set +e && source "/etc/profile" &>/dev/null && set -e
+        if [ "$IFACE_OLD" != "$IFACE" ] ; then
+            echo "INFO: Reinitalizing firewall..."
+            $KIRA_MANAGER/networking.sh
+        else
+            echo "INFO: Network interface was not changed"
+        fi
     elif [ "${OPTION,,}" == "s" ] || [ "${OPTION,,}" == "p" ] ; then
         [ "${OPTION,,}" == "s" ] && TYPE="seeds" && TARGET="Seed Nodes"
         [ "${OPTION,,}" == "p" ] && TYPE="peers" && TARGET="Persistent Peers"
@@ -143,8 +154,7 @@ echo -e "\e[37;1m--------------------------------------------------"
             fi
         done
         echo "INFO: Saving unique changes to $FILE..."
-        grep "\S" $FILE
-        sort -u $FILE | tee $FILE
+        sort -u $FILE -o $FILE
         [ "${SELECT,,}" == "a" ] && echo "INFO: Total of $i $TARGET addresses were added"
         [ "${SELECT,,}" == "r" ] && echo "INFO: Total of $i $TARGET addresses were removed"
 
@@ -157,12 +167,23 @@ echo -e "\e[37;1m--------------------------------------------------"
         
         echo "INFO: Re-starting $name container..."
         $KIRA_SCRIPTS/container-restart.sh $name
-    elif [ "${OPTION,,}" == "x" ]; then
+    elif [ "${OPTION,,}" == "f" ]; then
         echo "INFO: Reinitalizing firewall..."
         $KIRA_MANAGER/networking.sh
+    elif [ "${OPTION,,}" == "r" ]; then
+        echo "INFO: Restarting networks..."
+        $KIRA_MANAGER/scripts/restart-networks.sh
     elif [ "${OPTION,,}" == "x" ]; then
         echo "INFO: Stopping kira networking manager..."
         break
+    fi
+
+    if [ "${OPTION,,}" == "e" ] || [ "${OPTION,,}" == "c" ] || [ "${OPTION,,}" == "d" ] ; then
+        echo "INFO: To apply changes you will have to restart firewall"
+        SELECT="." && while [ "${SELECT,,}" != "r" ] && [ "${SELECT,,}" != "c" ] ; do echo -en "\e[31;1mChoose to [R]estart FIREWALL container or [C]ontinue: \e[0m\c" && read -d'' -s -n1 SELECT && echo ""; done
+        [ "${SELECT,,}" == "c" ] && continue
+        echo "INFO: Reinitalizing firewall..."
+        $KIRA_MANAGER/networking.sh
     fi
 
     [ ! -z $OPTION ] && echo -en "\e[31;1mINFO: Option ($OPTION) was executed, press any key to continue...\e[0m" && read -n 1 -s && echo ""

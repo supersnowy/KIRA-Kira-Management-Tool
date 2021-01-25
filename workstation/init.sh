@@ -138,6 +138,7 @@ if [ "${SKIP_UPDATE,,}" != "true" ]; then
     KIRA_SETUP_ESSSENTIALS="$KIRA_SETUP/essentials-$ESSENTIALS_HASH"
     if [ ! -f "$KIRA_SETUP_ESSSENTIALS" ]; then
         echo "INFO: Installing Essential Packages & Env Variables..."
+        rm -fv /var/lib/apt/lists/lock || echo "WARINING: Failed to remove APT lock"
         apt-get update -y
         apt-get install -y --allow-unauthenticated --allow-downgrades --allow-remove-essential --allow-change-held-packages \
             software-properties-common apt-transport-https ca-certificates gnupg curl wget git unzip build-essential \
@@ -233,8 +234,8 @@ if [ "${SKIP_UPDATE,,}" != "true" ]; then
     chmod -R 555 $KIRA_INFRA
 
     # update old processes
-    rm -r -f $KIRA_MANAGER
-    cp -r $KIRA_WORKSTATION $KIRA_MANAGER
+    rm -rfv $KIRA_MANAGER && mkdir -p "$KIRA_MANAGER"
+    cp -rfv "$KIRA_WORKSTATION/." $KIRA_MANAGER
     chmod -R 555 $KIRA_MANAGER
 
     echo "INFO: ReStarting init script to launch setup menu..."

@@ -22,12 +22,13 @@ LIP_SCAN_PATH="$SCAN_DIR/lip"
 IP_SCAN_PATH="$SCAN_DIR/ip"
 STATUS_SCAN_PATH="$SCAN_DIR/status"
 
-
 WHITESPACE="                                                          "
 
 echo "INFO: Wiping halt files of all containers..."
 rm -fv $DOCKER_COMMON/validator/halt
 rm -fv $DOCKER_COMMON/sentry/halt
+rm -fv $DOCKER_COMMON/priv_sentry/halt
+rm -fv $DOCKER_COMMON/snapshoot/halt
 rm -fv $DOCKER_COMMON/interx/halt
 rm -fv $DOCKER_COMMON/frontend/halt
 
@@ -61,12 +62,13 @@ while :; do
     
     STATUS_SOURCE="validator"
     NETWORK_STATUS=$(docker exec -i "$STATUS_SOURCE" sekaid status 2> /dev/null | jq -r '.' 2> /dev/null || echo "")
-    
+
     if [ "${LOADING,,}" == "false" ] ; then
         SUCCESS="true"
         ALL_CONTAINERS_PAUSED="true"
         ALL_CONTAINERS_STOPPED="true"
         ALL_CONTAINERS_HEALTHY="true"
+        ESSENTIAL_CONTAINERS_COUNT=0
         i=-1
         for name in $CONTAINERS; do
             if [ -f "$STATUS_SCAN_PATH/$name" ] ; then
@@ -84,6 +86,10 @@ while :; do
             [ "${name,,}" == "registry" ] && continue
             [ "${name,,}" == "snapshoot" ] && continue
             [ "${HEALTH_TMP,,}" != "healthy" ] && ALL_CONTAINERS_HEALTHY="false"
+
+            if [ "${name,,}" == "validator" ] || [ "${name,,}" == "sentry" ] ; then
+                [ "${STATUS_TMP,,}" == "running" ] && ESSENTIAL_CONTAINERS_COUNT=$((ESSENTIAL_CONTAINERS_COUNT + 1))
+            fi
 
             # if block height check fails via validator then try via interx
             if [ "${name,,}" == "interx" ] && [ "${STATUS_TMP,,}" == "running" ] && [ -z "${NETWORK_STATUS,,}" ]; then
@@ -106,11 +112,11 @@ while :; do
     [ "$LOCAL_IP" == "172.16.0.1" ] && LOCAL_IP="0.0.0.0"
     [ -z "$LOCAL_IP" ] && LOCAL_IP="0.0.0.0"
 
-    clear
+    printf "\033c"
 
     ALLOWED_OPTIONS="x"
     echo -e "\e[33;1m------------------------------------------------- [mode]"
-    echo "|         KIRA NETWORK MANAGER v0.0.6           : $INFRA_MODE mode"
+    echo "|         KIRA NETWORK MANAGER v0.0.7           : $INFRA_MODE mode"
     echo "|------------ $(date '+%d/%m/%Y %H:%M:%S') --------------|"
     CPU_TMP="CPU: ${CPU_UTIL}${WHITESPACE}"
     RAM_TMP="RAM: ${RAM_UTIL}${WHITESPACE}"
@@ -179,14 +185,14 @@ while :; do
         echo "|-----------------------------------------------|"
     fi
     
-    [ "${ALL_CONTAINERS_HEALTHY,,}" == "true" ] && \
+    [ $ESSENTIAL_CONTAINERS_COUNT -ge 2 ] && \
     echo "| [B] | BACKUP Chain State                      |" && ALLOWED_OPTIONS="${ALLOWED_OPTIONS}b"
     echo "| [D] | DUMP All Loggs                          |" && ALLOWED_OPTIONS="${ALLOWED_OPTIONS}d"
-    echo "| [N] | Manage NETWORKING & Firewall            |" && ALLOWED_OPTIONS="${ALLOWED_OPTIONS}d"
+    echo "| [N] | Manage NETWORKING & Firewall            |" && ALLOWED_OPTIONS="${ALLOWED_OPTIONS}n"
     echo "| [I] | Re-INITALIZE Infrastructure             |" && ALLOWED_OPTIONS="${ALLOWED_OPTIONS}i"
     echo -e "| [X] | Exit __________________________________ |\e[0m"
 
-    OPTION="" && read -s -n 1 -t 5 OPTION || OPTION=""
+    OPTION="" && read -s -n 1 -t 10 OPTION || OPTION=""
     [ -z "$OPTION" ] && continue
     [[ "${ALLOWED_OPTIONS,,}" != *"$OPTION"* ]] && continue
 
@@ -266,7 +272,7 @@ while :; do
         LOADING="true"
         EXECUTED="true"
     elif [ "${OPTION,,}" == "x" ]; then
-        clear
+        printf "\033c"
         echo "INFO: Stopping kira network scanner..."
         systemctl stop kirascan
         exit 0

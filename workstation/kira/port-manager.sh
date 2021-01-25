@@ -11,7 +11,6 @@ mkdir -p "$PORT_CFG_DIR"
 touch "$WHITELIST" "$BLACKLIST"
 
 while : ; do
-    clear
     set +e && source "/etc/profile" &>/dev/null && set -e
     PORT_EXPOSURE="PORT_EXPOSURE_$PORT" && PORT_EXPOSURE="${!PORT_EXPOSURE}"
     [ -z "$PORT_EXPOSURE" ] && PORT_EXPOSURE="enabled"
@@ -23,6 +22,8 @@ while : ; do
     [ "$PORT" == "$KIRA_FRONTEND_PORT" ] && TYPE="HTTP"
     PORT_TMP="${PORT}${WHITESPACE}"
     TYPE_TMP="${TYPE}${WHITESPACE}"
+
+    printf "\033c"
   
     ALLOWED_OPTIONS="x"
         echo -e "\e[37;1m--------------------------------------------------"
@@ -119,8 +120,7 @@ while : ; do
             fi
         done
         echo "INFO: Saving unique changes to $FILE..."
-        grep "\S" $FILE
-        sort -u $FILE | tee $FILE
+        sort -u $FILE -o $FILE
         echo "INFO: Total of $i IP addresses were $TARGET"
         REINITALIZE="true"
     elif [ "${OPTION,,}" == "x" ] ; then

@@ -6,7 +6,7 @@ set -x
 
 echo "INFO: Staring snapshoot v0.0.3"
 
-EXECUTED_CHECK="/root/executed"
+EXECUTED_CHECK="$COMMON_DIR/executed"
 
 SNAP_STATUS="$SNAP_DIR/status"
 SNAP_DONE="$SNAP_STATUS/done"

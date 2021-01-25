@@ -11,10 +11,7 @@ apt-get install -y --allow-unauthenticated --allow-downgrades --allow-remove-ess
 echo "APT Update, Update and Intall..."
 apt-get update -y --fix-missing
 apt-get install -y --allow-unauthenticated --allow-downgrades --allow-remove-essential --allow-change-held-packages \
-    file \
-    build-essential \
-    hashdeep \
-    make \
+    file build-essential net-tools hashdeep make \
     nodejs \
     node-gyp \
     tar \
@@ -36,16 +33,19 @@ apt-get install -y --allow-unauthenticated --allow-downgrades --allow-remove-ess
     curl \
     iputils-ping \
     nano \
-    jq
+    jq 
 
 apt update -y
-apt install -y bc
+apt install -y bc dnsutils psmisc 
 
 ARCHITECTURE=$(uname -m)
 GO_VERSION="1.15.6"
 CDHELPER_VERSION="v0.6.50"
-FLUTTER_VERSION="1.26.0-12.0.pre-dev"
-DART_VERSION="2.12.0-242.0.dev"
+FLUTTER_CHANNEL="beta"
+FLUTTER_VERSION="1.25.0-8.3.pre-$FLUTTER_CHANNEL"
+DART_CHANNEL_PATH="be/raw"
+DART_VERSION="latest"
+
 
 if [[ "${ARCHITECTURE,,}" == *"arm"* ]] || [[ "${ARCHITECTURE,,}" == *"aarch"* ]] ; then
     GOLANG_ARCH="arm64"
@@ -97,7 +97,7 @@ wget https://dl.google.com/go/$GO_TAR &>/dev/null
 tar -C /usr/local -xvf $GO_TAR &>/dev/null
 
 echo "Setting up essential flutter dependencies..."
-wget https://storage.googleapis.com/flutter_infra/releases/dev/linux/$FLUTTER_TAR
+wget https://storage.googleapis.com/flutter_infra/releases/$FLUTTER_CHANNEL/linux/$FLUTTER_TAR
 mkdir -p /usr/lib # make sure flutter root directory exists
 tar -C /usr/lib -xvf ./$FLUTTER_TAR
 
@@ -108,11 +108,8 @@ mkdir -p $FLUTTER_CACHE # make sure flutter cache direcotry exists & essential f
 touch $FLUTTER_CACHE/.dartignore
 touch $FLUTTER_CACHE/engine-dart-sdk.stamp
 
-wget https://storage.googleapis.com/dart-archive/channels/dev/release/$DART_VERSION/sdk/$DART_ZIP
+wget https://storage.googleapis.com/dart-archive/channels/$DART_CHANNEL_PATH/$DART_VERSION/sdk/$DART_ZIP
 unzip ./$DART_ZIP -d $FLUTTER_CACHE
 
 flutter config --enable-web
 flutter doctor
-
-
-

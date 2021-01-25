@@ -3,6 +3,7 @@ set +e && source "/etc/profile" &>/dev/null && set -e
 
 CONTAINER_NAME="priv_sentry"
 COMMON_PATH="$DOCKER_COMMON/$CONTAINER_NAME"
+COMMON_LOGS="$COMMON_PATH/logs"
 SNAP_DESTINATION="$COMMON_PATH/snap.zip"
 
 CPU_CORES=$(cat /proc/cpuinfo | grep processor | wc -l || echo "0")
@@ -32,7 +33,7 @@ echo "INFO: Setting up $CONTAINER_NAME config vars..."
 
 VALIDATOR_SEED=$(echo "${VALIDATOR_NODE_ID}@validator:$DEFAULT_P2P_PORT" | xargs | tr -d '\n' | tr -d '\r')
 
-mkdir -p "$COMMON_PATH"
+mkdir -p "$COMMON_LOGS"
 cp -a -v $KIRA_SECRETS/priv_sentry_node_key.json $COMMON_PATH/node_key.json
 
 rm -fv $SNAP_DESTINATION
@@ -50,6 +51,9 @@ touch "$PEERS_PATH" "$SEEDS_PATH"
 cp -a -v -f "$PEERS_PATH" "$COMMON_PEERS_PATH"
 cp -a -v -f "$SEEDS_PATH" "$COMMON_SEEDS_PATH"
 
+# cleanup
+rm -f -v "$COMMON_LOGS/healthcheck.log" "$COMMON_LOGS/start.log" "$COMMON_PATH/executed"
+
 echo "INFO: Starting $CONTAINER_NAME node..."
 
 docker run -d \
@@ -64,7 +68,9 @@ docker run -d \
     -e NETWORK_NAME="$NETWORK_NAME" \
     -e CFG_moniker="KIRA ${CONTAINER_NAME^^} NODE" \
     -e CFG_pex="false" \
-    -e CFG_rpc_laddr="tcp://0.0.0.0:$DEFAULT_RPC_PORT" \
+    -e CFG_grpc_laddr="tcp://127.0.0.1:$DEFAULT_GRPC_PORT" \
+    -e CFG_rpc_laddr="tcp://127.0.0.1:$DEFAULT_RPC_PORT" \
+    -e CFG_p2p_laddr="tcp://0.0.0.0:$DEFAULT_P2P_PORT" \
     -e CFG_persistent_peers="tcp://$VALIDATOR_SEED" \
     -e CFG_private_peer_ids="$VALIDATOR_NODE_ID,$SNAPSHOOT_NODE_ID,$SENTRYT_NODE_ID,$PRIV_SENTRYT_NODE_ID" \
     -e CFG_unconditional_peer_ids="$VALIDATOR_NODE_ID" \

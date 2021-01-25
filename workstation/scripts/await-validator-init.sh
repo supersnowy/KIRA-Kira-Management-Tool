@@ -1,5 +1,6 @@
 #!/bin/bash
 set +e && source "/etc/profile" &>/dev/null && set -e
+set -x
 
 DOCKER_COMMON=$1
 GENESIS_SOURCE=$2
@@ -13,13 +14,15 @@ NODE_ID=""
 rm -fv $GENESIS_DESTINATION
 
 CONTAINER_NAME="validator"
+COMMON_PATH="$DOCKER_COMMON/$CONTAINER_NAME"
+COMMON_LOGS="$COMMON_PATH/logs"
 
 while [ $i -le 40 ]; do
     i=$((i + 1))
 
     echo "INFO: Waiting for $CONTAINER_NAME container to start..."
     CONTAINER_EXISTS=$($KIRA_SCRIPTS/container-exists.sh "$CONTAINER_NAME" || echo "error")
-    if [ "${CONTAINER_EXISTS,,}" != "true" ]; then
+    if [ "${CONTAINER_EXISTS,,}" != "true" ] ; then
         sleep 12
         echo "WARNING: $CONTAINER_NAME container does not exists yet, waiting..."
         continue
@@ -28,7 +31,7 @@ while [ $i -le 40 ]; do
     fi
 
     echo "INFO: Awaiting $CONTAINER_NAME initialization..."
-    IS_STARTED=$(docker exec -i "$CONTAINER_NAME" [ -f /root/executed ] && echo "true" || echo "false")
+    IS_STARTED="false" && [ -f "$COMMON_PATH/executed" ] && IS_STARTED="true"
     if [ "${IS_STARTED,,}" != "true" ] ; then
         sleep 12
         echo "WARNING: $CONTAINER_NAME is not initialized yet"
@@ -60,8 +63,10 @@ while [ $i -le 40 ]; do
     fi
 done
 
-echo "INFO: Printing $CONTAINER_NAME health status..."
-docker exec -i $CONTAINER_NAME cat /self/logs/healthcheck_script_output.txt | tail -n 50 || echo "INFO: Failed to display $CONTAINER_NAME container health logs"
+echo "INFO: Printing $CONTAINER_NAME health logs..."
+cat $COMMON_LOGS/healthcheck.log | tail -n 75 || echo "INFO: Failed to display $CONTAINER_NAME container health logs"
+echo "INFO: Printing $CONTAINER_NAME start logs..."
+cat $COMMON_LOGS/start.log | tail -n 75 || echo "INFO: Failed to display $CONTAINER_NAME container start logs"
 
 if [ ! -f "$GENESIS_DESTINATION" ] ; then
     echo "ERROR: Failed to copy genesis file from the $CONTAINER_NAME node"
