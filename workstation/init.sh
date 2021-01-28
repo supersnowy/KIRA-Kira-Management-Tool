@@ -79,19 +79,19 @@ set -x
 CPU_CORES=$(cat /proc/cpuinfo | grep processor | wc -l || echo "0")
 RAM_MEMORY=$(grep MemTotal /proc/meminfo | awk '{print $2}' || echo "0")
 
-if [ $CPU_CORES -lt 2 ] ; then
+if [ $CPU_CORES -lt 2 ]; then
     echo "ERROR: KIRA Manager requires at lest 2 CPU cores but your machine has only $CPU_CORES"
     echo "INFO: Recommended CPU is 4 cores"
     exit 1
 fi
 
-if [ $RAM_MEMORY -lt 3145728 ] ; then
+if [ $RAM_MEMORY -lt 3145728 ]; then
     echo "ERROR: KIRA Manager requires at lest 4 GB RAM but your machine has only $RAM_MEMORY kB"
     echo "INFO: Recommended RAM is 8GB"
     exit 1
 fi
 
-[ -z "$SEKAI_BRANCH" ] && SEKAI_BRANCH="master"
+[ -z "$SEKAI_BRANCH" ] && SEKAI_BRANCH="v0.1.15.2"
 [ -z "$FRONTEND_BRANCH" ] && FRONTEND_BRANCH="master"
 [ -z "$INTERX_BRANCH" ] && INTERX_BRANCH="master"
 
@@ -155,7 +155,7 @@ if [ "${SKIP_UPDATE,,}" != "true" ]; then
         export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
         cd /tmp
 
-        if [[ "${ARCHITECTURE,,}" == *"arm"* ]] || [[ "${ARCHITECTURE,,}" == *"aarch"* ]] ; then
+        if [[ "${ARCHITECTURE,,}" == *"arm"* ]] || [[ "${ARCHITECTURE,,}" == *"aarch"* ]]; then
             CDHELPER_ARCH="arm64"
             EXPECTED_HASH="6cfd73a429463aa9f2e5f9e8462f5ada50ecaa1b4e21ad6d05caef4f21943273"
         else

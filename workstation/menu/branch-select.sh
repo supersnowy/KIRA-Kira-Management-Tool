@@ -10,13 +10,13 @@ SEKAI_BRANCH_DEFAULT=$SEKAI_BRANCH
 FRONTEND_BRANCH_DEFAULT=$FRONTEND_BRANCH
 INTERX_BRANCH_DEFAULT=$INTERX_BRANCH
 
-[ -z "$SEKAI_BRANCH_DEFAULT" ] && SEKAI_BRANCH_DEFAULT="master"
+[ -z "$SEKAI_BRANCH_DEFAULT" ] && SEKAI_BRANCH_DEFAULT="v0.1.15.2"
 [ -z "$FRONTEND_BRANCH_DEFAULT" ] && FRONTEND_BRANCH_DEFAULT="master"
 [ -z "$INTERX_BRANCH_DEFAULT" ] && INTERX_BRANCH_DEFAULT="master"
 
-if [ "${USE_DEFAULTS,,}" != "true" ] ; then
+if [ "${USE_DEFAULTS,,}" != "true" ]; then
     echo -en "\e[31;1mPlease select branches for each repository, [ENTER] if default\e[0m" && echo ""
-    
+
     read -p "Input SEKAI Branch (Default: $SEKAI_BRANCH_DEFAULT): " SEKAI_BRANCH
     read -p "Input FRONTEND Branch (Default: $FRONTEND_BRANCH_DEFAULT): " FRONTEND_BRANCH
     read -p "Input INTERX Branch (Default: $INTERX_BRANCH_DEFAULT): " INTERX_BRANCH
