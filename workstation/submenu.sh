@@ -20,6 +20,7 @@ INTERX_BRANCH_DEFAULT=$INTERX_BRANCH
 [ -z "$FRONTEND_BRANCH_DEFAULT" ] && FRONTEND_BRANCH_DEFAULT="master"
 [ -z "$INTERX_BRANCH_DEFAULT" ] && INTERX_BRANCH_DEFAULT="master"
 [ -z "$IFACE" ] && IFACE=$(netstat -rn | grep -m 1 UG | awk '{print $8}' | xargs)
+[ -z "$PORTS_EXPOSURE" ] && PORTS_EXPOSURE="enabled"
 
 set +x
 printf "\033c"
