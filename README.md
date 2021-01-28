@@ -77,7 +77,7 @@ First, the following command adds a new validator's key `val2`.
 sekaid keys add val2 --keyring-backend=test --home=$SEKAID_HOME
 ```
 
-Next, the following command whitelists `PermCreateSetPermissionsProposal` (defined as `4`) permission of the `validator`. This permission should be whitelisted to create a proposal.
+Next, the following command whitelists `PermCreateSetPermissionsProposal` (defined as `4`) permission of the `validator`. This permission should be whitelisted to create a proposal. (please replace the chain-id with your chain id)
 
 ```
 sekaid tx customgov permission whitelist-permission --from validator --keyring-backend=test --permission=4 --addr=$(sekaid keys show -a validator --keyring-backend=test --home=$SEKAID_HOME) --chain-id=testing --fees=100ukex --home=$SEKAID_HOME --yes
@@ -149,4 +149,16 @@ Try to spend `stake` token as fee with the following commands. You can see the `
 
 ```
 sekaid tx tokens upsert-rate --from validator --keyring-backend=test --denom="valstake" --rate="0.01" --fee_payments=true --chain-id=testing --fees=10000stake --home=$SEKAID_HOME --yes
+```
+
+### - How to create a proposal to create an upsert token alias
+
+```
+sekaid tx customgov proposal assign-permission 2 --addr=$(sekaid keys show -a val2 --keyring-backend=test --home=$SEKAID_HOME) --from=validator --keyring-backend=test --home=$SEKAID_HOME --chain-id=testing --fees=100ukex --yes
+```
+
+### - How to modify how long the proposal take
+
+```
+sekaid tx customgov set-network-properties --from validator --min_tx_fee="2" --max_tx_fee="20000" --keyring-backend=test --chain-id=testing --fees=100ukex --home=$SEKAID_HOME
 ```
