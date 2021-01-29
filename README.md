@@ -77,7 +77,7 @@ First, the following command adds a new validator's key `val2`.
 sekaid keys add val2 --keyring-backend=test --home=$SEKAID_HOME
 ```
 
-Next, the following command whitelists `PermCreateSetPermissionsProposal` (defined as `4`) permission of the `validator`. This permission should be whitelisted to create a proposal. (please replace the chain-id with your chain id)
+Next, the following command whitelists `PermCreateSetPermissionsProposal` (defined as `4`) permission of the `validator`. This permission should be whitelisted to create a proposal. (Please replace `testing` with your chain id)
 
 ```
 sekaid tx customgov permission whitelist-permission --from validator --keyring-backend=test --permission=4 --addr=$(sekaid keys show -a validator --keyring-backend=test --home=$SEKAID_HOME) --chain-id=testing --fees=100ukex --home=$SEKAID_HOME --yes
@@ -159,6 +159,37 @@ sekaid tx customgov proposal assign-permission 2 --addr=$(sekaid keys show -a va
 
 ### - How to modify how long the proposal take
 
+To modify how long the proposal take, we need to update the network property (`ProposalEndTime`, defined as `3`)
+We need to create a proposal `set-network-property` for updating network properties. The following command sets Proposal endtime to be 10. (Please replace `testing` with your chain id)
+
 ```
-sekaid tx customgov set-network-properties --from validator --min_tx_fee="2" --max_tx_fee="20000" --keyring-backend=test --chain-id=testing --fees=100ukex --home=$SEKAID_HOME
+sekaid tx customgov proposal set-network-property PROPOSAL_END_TIME 10 --from validator --keyring-backend=test --chain-id=testing --home=$SEKAID_HOME --fees=100ukex --yes
+```
+
+Then, we can check if the proposal is created or not with the following command.
+
+```
+sekaid query customgov proposals
+```
+
+After that, we can vote on a proposal with the following command. Here, we assume the proposal's id is `1`.
+
+```
+sekaid tx customgov proposal vote 1 1 --from validator --keyring-backend=test --home=$SEKAID_HOME --chain-id=testing --fees=100ukex --yes
+```
+
+Finally, let's make sure if the proposal end time is updated with the following command.
+
+```
+sekaid query customgov network-properties
+```
+
+### - How to claim governance seat
+
+```
+sekaid query validator --addr $(sekaid keys show -a validator --keyring-backend=test --home=$SEKAID_HOME)
+```
+
+```
+sekaid tx customgov councilor claim-seat --from validator --keyring-backend=test --home=$SEKAID_HOME
 ```
