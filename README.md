@@ -154,7 +154,7 @@ sekaid tx tokens upsert-rate --from validator --keyring-backend=test --denom="va
 ### - How to create a proposal to create an upsert token alias
 
 ```
-sekaid tx customgov proposal assign-permission 2 --addr=$(sekaid keys show -a val2 --keyring-backend=test --home=$SEKAID_HOME) --from=validator --keyring-backend=test --home=$SEKAID_HOME --chain-id=testing --fees=100ukex --yes
+sekaid tx tokens proposal-upsert-alias --from validator --denoms="stake" --fee_payments=true --chain-id=testing --keyring-backend=test --fees=100ukex --home=$SEKAID_HOME --yes
 ```
 
 ### - How to modify how long the proposal take
@@ -178,7 +178,7 @@ After that, we can vote on a proposal with the following command. Here, we assum
 sekaid tx customgov proposal vote 1 1 --from validator --keyring-backend=test --home=$SEKAID_HOME --chain-id=testing --fees=100ukex --yes
 ```
 
-Finally, let's make sure if the proposal end time is updated with the following command.
+Finally, let's make sure if the proposal end time is updated.
 
 ```
 sekaid query customgov network-properties
