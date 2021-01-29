@@ -186,10 +186,8 @@ sekaid query customgov network-properties
 
 ### - How to claim governance seat
 
-```
-sekaid query validator --addr $(sekaid keys show -a validator --keyring-backend=test --home=$SEKAID_HOME)
-```
+The following command claims the validator as a governance actor. By the way, the first validator is automatically a governance actor.
 
 ```
-sekaid tx customgov councilor claim-seat --from validator --keyring-backend=test --home=$SEKAID_HOME
+sekaid tx customgov councilor claim-seat --from validator --address=$(sekaid keys show -a validator --keyring-backend=test --home=$SEKAID_HOME) --keyring-backend=test  --chain-id=testing --home=$SEKAID_HOME --fees=100ukex --yes
 ```
