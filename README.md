@@ -117,10 +117,10 @@ First, let's get the val-address of the `val2`.
 validatorKey=$(sekaid val-address $(sekaid keys show -a val2 --keyring-backend=test))
 ```
 
-Then, let's claim the validator seat which performs to create a validator.
+Then, let's claim the validator seat which performs to create a validator `val2`.
 
 ```
-sekaid tx claim-validator-seat --from validator --keyring-backend=test --home=$SEKAID_HOME --validator-key=$validatorKey --moniker="validator" --chain-id=testing --fees=100ukex --yes
+sekaid tx claim-validator-seat --from val2 --keyring-backend=test --home=$SEKAID_HOME --validator-key=$validatorKey --moniker="validator" --chain-id=testing --fees=100ukex --yes
 ```
 
 ### - How to make token transactions in different currencies
