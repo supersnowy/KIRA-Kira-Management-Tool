@@ -7,7 +7,6 @@ NAME=$1
 COMMON_PATH="$DOCKER_COMMON/$NAME"
 COMMON_LOGS="$COMMON_PATH/logs"
 HALT_FILE="$COMMON_PATH/halt"
-HEALTHCHECK_LOGS="$COMMON_LOGS/healthcheck.log"
 START_LOGS="$COMMON_LOGS/start.log"
 
 set +x
@@ -29,23 +28,22 @@ SNAP_LATEST="$SNAP_STATUS/latest"
 
 TMP_DIR="/tmp/kira-cnt-stats" # performance counters directory
 LIP_PATH="$TMP_DIR/lip-$NAME"
-KADDR_PATH="$TMP_DIR/kira-addr-$NAME" # kira address 
-NODE_ID_PATH="$TMP_DIR/node-id-$NAME" # kira address 
+KADDR_PATH="$TMP_DIR/kira-addr-$NAME" # kira address
 
-echo "INFO: Wiping halt files of $NAME container..."
+echo "INFO: Cleanup, getting container manager ready..."
 
 mkdir -p "$TMP_DIR" "$COMMON_LOGS" "$CONTAINER_DUMP"
-rm -fv "$LIP_PATH" "$KADDR_PATH" "$NODE_ID_PATH" "$HALT_FILE"
-touch $LIP_PATH $KADDR_PATH $NODE_ID_PATH
+rm -fv "$LIP_PATH" "$KADDR_PATH"
+touch $LIP_PATH $KADDR_PATH
 
 HOSTNAME=""
+KIRA_NODE_BLOCK=""
 LOADING="true"
 while : ; do
     START_TIME="$(date -u +%s)"
     NETWORKS=$(cat $NETWORKS_SCAN_PATH 2> /dev/null || echo "")
     LIP=$(cat $LIP_PATH)
     KADDR=$(cat $KADDR_PATH)
-    NODE_ID=$(cat $NODE_ID_PATH)
 
     touch "${LIP_PATH}.pid" && if ! kill -0 $(cat "${LIP_PATH}.pid") 2> /dev/null ; then
         if [ ! -z "$HOSTNAME" ] ; then
@@ -61,22 +59,29 @@ while : ; do
         fi
     fi
 
-    touch "${NODE_ID_PATH}.pid" && if ! kill -0 $(cat "${NODE_ID_PATH}.pid") 2> /dev/null ; then
-        if [ "${NAME,,}" == "sentry" ] || [ "${NAME,,}" == "priv_sentry" ] || [ "${NAME,,}" == "snapshoot" ] || [ "${NAME,,}" == "validator" ] ; then
-            echo $(docker exec -i $NAME sekaid status 2> /dev/null | jq -r '.node_info.id' 2> /dev/null || echo "") > "$NODE_ID_PATH" &
-            PID3="$!" && echo "$PID3" > "${NODE_ID_PATH}.pid"
+    if [ "${NAME,,}" == "interx" ] || [ "${NAME,,}" == "validator" ] || [ "${NAME,,}" == "sentry" ] || [ "${NAME,,}" == "priv_sentry" ] || [ "${NAME,,}" == "snapshoot" ] ; then
+        SEKAID_STATUS=$(cat "${CONTAINER_STATUS}.sekaid.status" 2> /dev/null | jq -r '.' 2>/dev/null || echo "")
+        if [ "${NAME,,}" != "interx" ] ; then 
+            KIRA_NODE_ID=$(echo "$SEKAID_STATUS" 2> /dev/null | jq -r '.NodeInfo.id' 2> /dev/null || echo "")
+            ( [ -z "$KIRA_NODE_ID" ] || [ "${KIRA_NODE_ID,,}" == "null" ] ) && KIRA_NODE_ID=$(echo "$SEKAID_STATUS" 2> /dev/null | jq -r '.node_info.id' 2> /dev/null || echo "")
         fi
+        KIRA_NODE_CATCHING_UP=$(echo "$SEKAID_STATUS" 2> /dev/null | jq -r '.SyncInfo.catching_up' 2> /dev/null || echo "")
+        ( [ -z "$KIRA_NODE_CATCHING_UP" ] || [ "${KIRA_NODE_CATCHING_UP,,}" == "null" ] ) && KIRA_NODE_CATCHING_UP=$(echo "$SEKAID_STATUS" 2> /dev/null | jq -r '.sync_info.catching_up' 2> /dev/null || echo "")
+        [ "${KIRA_NODE_CATCHING_UP,,}" != "true" ] && KIRA_NODE_CATCHING_UP="false"
+        KIRA_NODE_BLOCK=$(echo "$SEKAID_STATUS" 2> /dev/null | jq -r '.SyncInfo.latest_block_height' 2> /dev/null || echo "0")
+        ( [ -z "$KIRA_NODE_BLOCK" ] || [ "${KIRA_NODE_BLOCK,,}" == "null" ] ) && KIRA_NODE_BLOCK=$(echo "$SEKAID_STATUS" 2> /dev/null | jq -r '.sync_info.latest_block_height' 2> /dev/null || echo "0")
+        [[ $KIRA_NODE_BLOCK =~ ^[0-9]+$ ]] && KIRA_NODE_BLOCK="$KIRA_NODE_BLOCK" || KIRA_NODE_BLOCK="0"
     fi
 
     printf "\033c"
     
     echo -e "\e[36;1m-----------------------------------------------------"
-    echo "|          KIRA CONTAINER MANAGER v0.0.9            |"
+    echo "|          KIRA CONTAINER MANAGER v0.0.10           |"
     echo "|-------------- $(date '+%d/%m/%Y %H:%M:%S') ----------------|"
 
-    if [ "${LOADING,,}" == "true" ] ; then
+    if [ "${LOADING,,}" == "true" ] || [ ! -f "$CONTAINER_STATUS" ] ; then
         echo -e "|\e[0m\e[31;1m PLEASE WAIT, LOADING CONTAINER STATUS ...         \e[36;1m|"
-        while [ ! -f $SCAN_DONE ] ; do
+        while [ ! -f $SCAN_DONE ] || [ ! -f "$CONTAINER_STATUS" ] ; do
             sleep 1
         done
         wait $PID1 
@@ -148,8 +153,13 @@ while : ; do
     ALLOWED_OPTIONS="x"
     [ "${RESTARTING,,}" == "true" ] && STATUS="restart"
     echo "|---------------------------------------------------|"
-    [ ! -z "$HOSTNAME" ] && v="${HOSTNAME}${WHITESPACE}" && echo "|    Host: ${v:0:40} |"
-    [ ! -z "$NODE_ID" ]  && v="${NODE_ID}${WHITESPACE}"  && echo "| Node Id: ${v:0:40} |"
+    [ ! -z "$HOSTNAME" ] && v="${HOSTNAME}${WHITESPACE}"           && echo "|    Host: ${v:0:40} |"
+    [ ! -z "$KIRA_NODE_ID" ]  && v="${KIRA_NODE_ID}${WHITESPACE}"  && echo "| Node Id: ${v:0:40} |"
+    if [ ! -z "$KIRA_NODE_BLOCK" ] ; then
+        TMP_VAR="${KIRA_NODE_BLOCK}${WHITESPACE}"
+        [ "${KIRA_NODE_CATCHING_UP,,}" == "true" ] && TMP_VAR="$KIRA_NODE_BLOCK (catching up) ${WHITESPACE}"
+        echo "|   Block: ${TMP_VAR:0:40} |"
+    fi
     [ "$STATUS" != "exited" ] && \
     echo "|  Status: $STATUS ($(echo $STARTED_AT | head -c 19))"
     [ "$STATUS" == "exited" ] && \
@@ -164,9 +174,11 @@ while : ; do
     [ "$STATUS" == "running" ]     && echo "| [S] | STOP container                              |" && ALLOWED_OPTIONS="${ALLOWED_OPTIONS}s"
     [ "$STATUS" == "running" ]     && echo "| [P] | PAUSE container                             |" && ALLOWED_OPTIONS="${ALLOWED_OPTIONS}p"
     [ "$STATUS" == "paused" ]      && echo "| [P] | Un-PAUSE container                          |" && ALLOWED_OPTIONS="${ALLOWED_OPTIONS}p"
+    [ -f "$HALT_FILE" ]            && echo "| [K] | Un-HALT (revive) all processes              |" && ALLOWED_OPTIONS="${ALLOWED_OPTIONS}k"
+    [ ! -f "$HALT_FILE" ]          && echo "| [K] | KILL (halt) all processes                   |" && ALLOWED_OPTIONS="${ALLOWED_OPTIONS}k"
                                       echo "|---------------------------------------------------|"
-    [ -f "$START_LOGS" ]           && echo "| [L] | Show container LOGS                         |" && ALLOWED_OPTIONS="${ALLOWED_OPTIONS}l"
-    [ -f "$HEALTHCHECK_LOGS" ]     && echo "| [H] | Show HEALTHCHECK logs                       |" && ALLOWED_OPTIONS="${ALLOWED_OPTIONS}h"
+    [ "${EXISTS,,}" == "true" ]    && echo "| [L] | Show container LOGS                         |" && ALLOWED_OPTIONS="${ALLOWED_OPTIONS}l"
+    [ "${EXISTS,,}" == "true" ]    && echo "| [H] | Show HEALTHCHECK logs                       |" && ALLOWED_OPTIONS="${ALLOWED_OPTIONS}h"
     [ "${EXISTS,,}" == "true" ]    && echo "| [D] | DUMP all container logs                     |" && ALLOWED_OPTIONS="${ALLOWED_OPTIONS}d"
     [ "${EXISTS,,}" == "true" ] && echo -e "| [X] | Exit ______________________________________ |\e[0m"
 
@@ -189,7 +201,7 @@ while : ; do
         docker exec -it $ID bash || docker exec -it $ID sh || FAILURE="true"
         
         if [ "${FAILURE,,}" == "true" ] ; then
-            ACCEPT="" && while [ "${ACCEPT,,}" != "y" ] && [ "${ACCEPT,,}" != "n" ] ; do echo -en "\e[36;1mPress [Y]es to reboot & retry or [N]o to cancel: \e[0m\c" && read  -d'' -s -n1 ACCEPT && echo "" ; done
+            ACCEPT="" && while [ "${ACCEPT,,}" != "y" ] && [ "${ACCEPT,,}" != "n" ] ; do echo -en "\e[36;1mPress [Y]es to halt all processes, reboot & retry or [N]o to cancel: \e[0m\c" && read  -d'' -s -n1 ACCEPT && echo "" ; done
             [ "${ACCEPT,,}" == "n" ] && echo -e "\nWARINIG: Operation was cancelled\n" && sleep 1 && continue
             echo "WARNING: Failed to inspect $NAME container"
             echo "INFO: Attempting to start & prevent node from restarting..."
@@ -201,7 +213,8 @@ while : ; do
             echo "INFO: To exit the container type 'exit'"
             docker exec -it $ID bash || docker exec -it $ID sh || echo "WARNING: Failed to inspect $NAME container"
         fi
-        rm -fv $HALT_FILE
+        
+        [ -f "$HALT_FILE" ] && echo "INFO: Applications running within your container were halted, you will have to choose Un-HALT option to start them again!"
         OPTION=""
         EXECUTED="true"
     elif [ "${OPTION,,}" == "d" ] ; then
@@ -213,6 +226,18 @@ while : ; do
         $KIRA_SCRIPTS/container-restart.sh $NAME
         LOADING="true"
         EXECUTED="true"
+    elif [ "${OPTION,,}" == "k" ] ; then
+        if [ -f "$HALT_FILE" ] ; then
+            echo "INFO: Removing halt file"
+            rm -fv $HALT_FILE
+        else
+            echo "INFO: Creating halt file"
+            touch $HALT_FILE
+        fi
+        echo "INFO: Restarting container..."
+        $KIRA_SCRIPTS/container-restart.sh $NAME
+        LOADING="true"
+        EXECUTED="true"
     elif [ "${OPTION,,}" == "s" ] && [ "$STATUS" == "running" ] ; then
         echo "INFO: Stopping container..."
         $KIRA_SCRIPTS/container-stop.sh $NAME
@@ -220,11 +245,13 @@ while : ; do
         EXECUTED="true"
     elif [ "${OPTION,,}" == "s" ] && [ "$STATUS" != "running" ] ; then
         echo "INFO: Starting container..."
+        rm -fv $HALT_FILE
         $KIRA_SCRIPTS/container-start.sh $NAME
         LOADING="true"
         EXECUTED="true"
     elif [ "${OPTION,,}" == "p" ] && [ "$STATUS" == "running" ] ; then
         echo "INFO: Pausing container..."
+        rm -fv $HALT_FILE
         $KIRA_SCRIPTS/container-pause.sh $NAME
         LOADING="true"
         EXECUTED="true"
@@ -237,21 +264,28 @@ while : ; do
         LOG_LINES=10
         READ_HEAD=true
         SHOW_ALL=false
+        TMP_DUMP=$CONTAINER_DUMP/tmp.log
         while : ; do
             printf "\033c"
             echo "INFO: Attempting to display $NAME container log..."
-            TMP_DUMP=$CONTAINER_DUMP/tmp.log && rm -f $TMP_DUMP && touch $TMP_DUMP
-            [ ! -f "$START_LOGS"] && docker logs --details --timestamps $ID > $START_LOGS || echo "WARNING: Failed to dump $NAME container logs"
-            cat $START_LOGS > $TMP_DUMP || echo "WARNING: Failed to read $NAME container logs"
+            rm -f $TMP_DUMP && touch $TMP_DUMP
+
+            if [ ! -f "$START_LOGS" ] ; then
+                docker logs --details --timestamps $ID > $TMP_DUMP || echo "WARNING: Failed to dump $NAME container logs"
+            else
+                cat $START_LOGS > $TMP_DUMP || echo "WARNING: Failed to read $NAME container logs"
+            fi
+
             MAX=$(cat $TMP_DUMP | wc -l)
             [ $LOG_LINES -gt $MAX ] && LOG_LINES=$MAX
             echo -e "\e[36;1mINFO: Found $LINES_MAX log lines, printing $LOG_LINES...\e[0m"
             TMP_LOG_LINES=$LOG_LINES && [ "${SHOW_ALL,,}" == "true" ] && TMP_LOG_LINES=10000
             [ "${READ_HEAD,,}" == "true" ] && tac $TMP_DUMP | head -n $TMP_LOG_LINES && echo -e "\e[36;1mINFO: Printed LAST $TMP_LOG_LINES lines\e[0m"
             [ "${READ_HEAD,,}" != "true" ] && cat $TMP_DUMP | head -n $TMP_LOG_LINES && echo -e "\e[36;1mINFO: Printed FIRST $TMP_LOG_LINES lines\e[0m"
-            ACCEPT="" && while [ "${ACCEPT,,}" != "a" ] && [ "${ACCEPT,,}" != "s" ] && [ "${ACCEPT,,}" != "m" ] && [ "${ACCEPT,,}" != "l" ] && [ "${ACCEPT,,}" != "c" ] && [ "${ACCEPT,,}" != "r" ] ; do echo -en "\e[36;1mShow [A]ll, [M]ore, [L]ess, [R]efresh, [S]wap or [C]lose: \e[0m\c" && read  -d'' -s -n1 ACCEPT && echo "" ; done
+            ACCEPT="" && while [ "${ACCEPT,,}" != "d" ] && [ "${ACCEPT,,}" != "a" ] && [ "${ACCEPT,,}" != "s" ] && [ "${ACCEPT,,}" != "m" ] && [ "${ACCEPT,,}" != "l" ] && [ "${ACCEPT,,}" != "c" ] && [ "${ACCEPT,,}" != "r" ] ; do echo -en "\e[36;1mShow [A]ll, [M]ore, [L]ess, [R]efresh, [D]elete [S]wap or [C]lose: \e[0m\c" && read  -d'' -s -n1 ACCEPT && echo "" ; done
             [ "${ACCEPT,,}" == "a" ] && SHOW_ALL="true"
             [ "${ACCEPT,,}" == "c" ] && echo -e "\nINFO: Closing log file...\n" && sleep 1 && break
+            [ "${ACCEPT,,}" == "d" ] && rm -fv "$START_LOGS" && continue
             [ "${ACCEPT,,}" == "r" ] && continue
             [ "${ACCEPT,,}" == "m" ] && SHOW_ALL="false" && LOG_LINES=$(($LOG_LINES + 10))
             [ "${ACCEPT,,}" == "l" ] && SHOW_ALL="false" && [ $LOG_LINES -gt 5 ] && LOG_LINES=$(($LOG_LINES - 10))
@@ -269,11 +303,14 @@ while : ; do
         LOG_LINES=10
         READ_HEAD=true
         SHOW_ALL=false
+        TMP_DUMP=$CONTAINER_DUMP/tmp.log
         while : ; do
             printf "\033c"
             echo "INFO: Attempting to display $NAME container healthcheck logs..."
-            TMP_DUMP=$CONTAINER_DUMP/tmp.log && rm -f $TMP_DUMP && touch $TMP_DUMP
-            cat $HEALTHCHECK_LOGS > $TMP_DUMP || echo "WARNING: Failed to dump $NAME container healthcheck logs"
+            rm -f $TMP_DUMP && touch $TMP_DUMP 
+
+            docker inspect --format "{{json .State.Health }}" "$ID" | jq '.Log[-1].Output' | xargs | sed 's/\\n/\n/g' > $TMP_DUMP || echo "WARNING: Failed to dump $NAME container healthcheck logs"
+
             MAX=$(cat $TMP_DUMP | wc -l)
             [ $LOG_LINES -gt $MAX ] && LOG_LINES=$MAX
             echo -e "\e[36;1mINFO: Found $LINES_MAX log lines, printing $LOG_LINES...\e[0m"

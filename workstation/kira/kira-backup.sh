@@ -1,12 +1,13 @@
 #!/bin/bash
 set +e && source "/etc/profile" &>/dev/null && set -e
+source $KIRA_MANAGER/utils.sh
 # quick edit: FILE="$KIRA_MANAGER/kira/kira-backup.sh" && rm -f $FILE && nano $FILE && chmod 555 $FILE
 
 echo -en "\e[31;1mInput halt height or press [ENTER] to snapshoot latest state: \e[0m"
 read HALT_HEIGHT
 DEFAULT_SNAP_DIR=$KIRA_SNAP
 echo "INFO: Default snapshoot directory: $DEFAULT_SNAP_DIR"
-SELECT="." && while [ "${SELECT,,}" != "n" ] && [ ! -z "${SELECT,,}" ]; do echo -en "\e[31;1mInput [N]ew snapshoot directory or press [ENTER] to continue: \e[0m\c" && read -d'' -s -n1 SELECT && echo ""; done
+SELECT="." && while [ "${SELECT,,}" != "n" ] && [ ! -z "${SELECT,,}" ]; do echoNErr -en "\e[31;1mInput [N]ew snapshoot directory or press [ENTER] to continue: \e[0m\c" && read -d'' -s -n1 SELECT && echo ""; done
 [ "${SELECT,,}" == "n" ] && read "$DEFAULT_SNAP_DIR"
 [ -z "$DEFAULT_SNAP_DIR" ] && DEFAULT_SNAP_DIR=$KIRA_SNAP
 
@@ -15,13 +16,19 @@ echo "INFO: Making sure that snap direcotry exists..."
 mkdir -p $DEFAULT_SNAP_DIR && echo "INFO: Success, snap direcotry is present"
 
 SNAPSHOOT=""
-if [ -f "$KIRA_SNAP_PATH" ] ; then
-    SELECT="." && while [ "${SELECT,,}" != "s" ] && [ ! -z "${SELECT,,}" ]; do echo -en "\e[31;1mChoose to [S]ync from snapshoot or press [ENTER] to continue: \e[0m\c" && read -d'' -s -n1 SELECT && echo ""; done
-    if [ "${SELECT,,}" == "s" ] ; then
-        SNAPSHOOTS=`ls $DEFAULT_SNAP_DIR/*.zip` # get all zip files in the snap directory
-        SNAPSHOOTS_COUNT=${#SNAPSHOOTS[@]}
-        SNAP_LATEST_PATH="$KIRA_SNAP_PATH"
-
+SELECT="." && while [ "${SELECT,,}" != "s" ] && [ ! -z "${SELECT,,}" ]; do echoNErr "Choose to [S]ync from snapshoot or press [ENTER] to continue: " && read -d'' -s -n1 SELECT && echo ""; done
+if [ "${SELECT,,}" == "s" ] ; then
+    # get all zip files in the snap directory
+    SNAPSHOOTS=`ls $DEFAULT_SNAP_DIR/*.zip` || SNAPSHOOTS=""
+    SNAPSHOOTS_COUNT=${#SNAPSHOOTS[@]}
+    [ -z "$SNAPSHOOTS" ] && SNAPSHOOTS_COUNT="0"
+    SNAP_LATEST_PATH="$KIRA_SNAP_PATH"
+     
+    if [ $SNAPSHOOTS_COUNT -le 0 ] || [ -z "$SNAPSHOOTS" ] ; then
+        echoWarn "WARNING: No snapshoots were found in the '$DEFAULT_SNAP_DIR' direcory"
+        echoNErr "Press any key to abort..." && read -n 1 -s && echo ""
+        exit 0
+    else
         i=-1
         LAST_SNAP=""
         for s in $SNAPSHOOTS ; do
@@ -49,9 +56,10 @@ if [ -f "$KIRA_SNAP_PATH" ] ; then
             SNAPSHOOT=$SNAP_LATEST_PATH
         fi
         
-        echo -en "\e[33;1mINFO: Snapshoot '$SNAPSHOOT' ($OPTION) was selected\e[0m" && echo ""
-        echo -en "\e[31;1mPress any key to continue or Ctrl+C to abort...\e[0m" && read -n 1 -s && echo ""
-    fi 
+        echoInfo "INFO: Snapshoot '$SNAPSHOOT' ($OPTION) was selected"
+    fi
+     
+    echoNErr "Press any key to continue or Ctrl+C to abort..." && read -n 1 -s && echo ""
 fi
 
 CDHelper text lineswap --insert="KIRA_SNAP=$DEFAULT_SNAP_DIR" --prefix="KIRA_SNAP=" --path=$ETC_PROFILE --append-if-found-not=True

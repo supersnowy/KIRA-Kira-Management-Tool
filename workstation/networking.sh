@@ -107,7 +107,6 @@ for PORT in "${PORTS[@]}" ; do
         firewall-cmd --permanent --zone=$ZONE --add-rich-rule="rule priority=$PRIORITY_MIN family=\"ipv4\" source address=\"$ALL_IP\" port port=\"$PORT\" protocol=\"tcp\" reject"
         while read ip; do
             [ -z "$ip" ] && continue # only display non-empty lines
-            i=$((i + 1))
             echo "INFO: Whitelisting address ${ip}..."
             firewall-cmd --permanent --zone=$ZONE --add-rich-rule="rule priority=$PRIORITY_WHITELIST family=\"ipv4\" source address=\"$ip\" port port=\"$PORT\" protocol=\"tcp\" accept"
         done < $WHITELIST
@@ -115,7 +114,6 @@ for PORT in "${PORTS[@]}" ; do
         echo "INFO: Custom blacklist rules will be applied to the port $PORT..."
         while read ip; do
             [ -z "$ip" ] && continue # only display non-empty lines
-            i=$((i + 1))
             echo "INFO: Blacklisting address ${ip}..."
             firewall-cmd --permanent --zone=$ZONE --add-rich-rule="rule priority=$PRIORITY_BLACKLIST family=\"ipv4\" source address=\"$ip\" port port=\"$PORT\" protocol=\"tcp\" reject"
         done < $BLACKLIST
@@ -135,8 +133,10 @@ firewall-cmd --permanent --zone=$ZONE --add-rich-rule="rule priority=$PRIORITY_M
 firewall-cmd --get-zones
 firewall-cmd --zone=$ZONE --list-all || echo "INFO: Failed to list '$ZONE' zone"
 firewall-cmd --zone=trusted --list-all 
-firewall-cmd --zone=public --list-all 
-firewall-cmd --set-default-zone=$ZONE
+firewall-cmd --zone=public --list-all
+firewall-cmd --reload
+firewall-cmd --complete-reload
+firewall-cmd --set-default-zone=$ZONE # can't set the zone before reloading first
 firewall-cmd --reload
 firewall-cmd --complete-reload
 firewall-cmd --check-config || echo "INFO: Failed to check firewall config"

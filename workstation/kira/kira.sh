@@ -1,5 +1,6 @@
 #!/bin/bash
 set +e && source "/etc/profile" &>/dev/null && set -e
+source $KIRA_MANAGER/utils.sh
 # quick edit: FILE="$KIRA_MANAGER/kira/kira.sh" && rm $FILE && nano $FILE && chmod 555 $FILE
 
 set +x
@@ -21,23 +22,15 @@ RAM_SCAN_PATH="$SCAN_DIR/ram"
 LIP_SCAN_PATH="$SCAN_DIR/lip"
 IP_SCAN_PATH="$SCAN_DIR/ip"
 STATUS_SCAN_PATH="$SCAN_DIR/status"
-
+GENESIS_JSON="$KIRA_CONFIGS/genesis.json"
 WHITESPACE="                                                          "
-
-echo "INFO: Wiping halt files of all containers..."
-rm -fv $DOCKER_COMMON/validator/halt
-rm -fv $DOCKER_COMMON/sentry/halt
-rm -fv $DOCKER_COMMON/priv_sentry/halt
-rm -fv $DOCKER_COMMON/snapshoot/halt
-rm -fv $DOCKER_COMMON/interx/halt
-rm -fv $DOCKER_COMMON/frontend/halt
 
 echo "INFO: Restarting network scanner..."
 systemctl daemon-reload
 systemctl restart kirascan
 
 LOADING="true"
-while :; do
+while : ; do
     set +e && source "/etc/profile" &>/dev/null && set -e
     SNAP_STATUS="$KIRA_SNAP/status"
     SNAP_PROGRESS="$SNAP_STATUS/progress"
@@ -60,24 +53,37 @@ while :; do
         [ -f "$SNAP_LATEST_FILE" ] && [ -f "$KIRA_SNAP_PATH" ] && KIRA_SNAP_PATH=$SNAP_LATEST_FILE # ensure latest snap is up to date
     fi
     
-    STATUS_SOURCE="validator"
-    NETWORK_STATUS=$(docker exec -i "$STATUS_SOURCE" sekaid status 2> /dev/null | jq -r '.' 2> /dev/null || echo "")
-
     if [ "${LOADING,,}" == "false" ] ; then
         SUCCESS="true"
         ALL_CONTAINERS_PAUSED="true"
         ALL_CONTAINERS_STOPPED="true"
         ALL_CONTAINERS_HEALTHY="true"
         ESSENTIAL_CONTAINERS_COUNT=0
+        KIRA_BLOCK=0
+        CATCHING_UP="false"
+
         i=-1
         for name in $CONTAINERS; do
-            if [ -f "$STATUS_SCAN_PATH/$name" ] ; then
-                source "$STATUS_SCAN_PATH/$name"
+            SCAN_PATH_VARS="$STATUS_SCAN_PATH/$name"
+            SEKAID_STATUS="${SCAN_PATH_VARS}.sekaid.status"
+
+            if [ -f "$SCAN_PATH_VARS" ] ; then
+                source "$SCAN_PATH_VARS"
+                i=$((i + 1))
             else
                 continue
             fi
 
-            i=$((i + 1))
+            SEKAID_STATUS=$(cat "${SCAN_PATH_VARS}.sekaid.status" 2> /dev/null | jq -r '.' 2>/dev/null || echo "")
+            TMP_VAR=$(echo $SEKAID_STATUS | jq -r '.SyncInfo.latest_block_height' 2> /dev/null || echo "0")
+            ( [ -z "$TMP_VAR" ] || [ "${TMP_VAR,,}" == "null" ] ) && TMP_VAR=$(echo $SEKAID_STATUS | jq -r '.sync_info.latest_block_height' 2> /dev/null || echo "0")
+            [[ $TMP_VAR =~ ^[0-9]+$ ]] && KIRA_BLOCK_TMP="$TMP_VAR" || KIRA_BLOCK_TMP="0"
+            SYNCING_TMP=$(echo $SEKAID_STATUS | jq -r '.SyncInfo.catching_up' 2> /dev/null || echo "false")
+            ( [ -z "$SYNCING_TMP" ] || [ "${SYNCING_TMP,,}" == "null" ] ) && SYNCING_TMP=$(echo $SEKAID_STATUS | jq -r '.sync_info.catching_up' 2> /dev/null || echo "false")
+
+            # if some other node then snapshoot is syncig then infra is not ready
+            [ "${name,,}" != "snapshoot" ] && [ "${SYNCING_TMP,,}" == "true" ] && CATCHING_UP="true"
+
             STATUS_TMP="STATUS_$name" && STATUS_TMP="${!STATUS_TMP}"
             HEALTH_TMP="HEALTH_$name" && HEALTH_TMP="${!HEALTH_TMP}"
             [ "${STATUS_TMP,,}" != "running" ] && SUCCESS="false"
@@ -87,27 +93,18 @@ while :; do
             [ "${name,,}" == "snapshoot" ] && continue
             [ "${HEALTH_TMP,,}" != "healthy" ] && ALL_CONTAINERS_HEALTHY="false"
 
-            if [ "${name,,}" == "validator" ] || [ "${name,,}" == "sentry" ] ; then
-                [ "${STATUS_TMP,,}" == "running" ] && ESSENTIAL_CONTAINERS_COUNT=$((ESSENTIAL_CONTAINERS_COUNT + 1))
+            if [ "${STATUS_TMP,,}" == "running" ] && [[ "${name,,}" =~ ^(validator|sentry)$ ]] ; then
+                ESSENTIAL_CONTAINERS_COUNT=$((ESSENTIAL_CONTAINERS_COUNT + 1))
             fi
 
-            # if block height check fails via validator then try via interx
-            if [ "${name,,}" == "interx" ] && [ "${STATUS_TMP,,}" == "running" ] && [ -z "${NETWORK_STATUS,,}" ]; then
-                STATUS_SOURCE="$name"
-                NETWORK_STATUS=$(curl -s -m 1 http://$KIRA_INTERX_DNS:$KIRA_INTERX_PORT/api/status 2>/dev/null || echo "")
-            fi
-    
-            # if block height check fails via validator then try via sentry
-            if [ "${name,,}" == "sentry" ] && [ "${STATUS_TMP,,}" == "running" ] && [ -z "${NETWORK_STATUS,,}" ]; then
-                STATUS_SOURCE="$name"
-                NETWORK_STATUS=$(docker exec -i "$name" sekaid status 2>/dev/null | jq -r '.' 2>/dev/null || echo "")
+            if [ ! -z "$SEKAID_STATUS" ] && ( [ -z "$NETWORK_STATUS" ] || [ $KIRA_BLOCK_TMP -gt $KIRA_BLOCK ] ) ; then
+                NETWORK_STATUS=$SEKAID_STATUS
+                KIRA_BLOCK=$KIRA_BLOCK_TMP
             fi
         done
         CONTAINERS_COUNT=$((i + 1))
     fi
 
-    KIRA_NETWORK=$(echo $NETWORK_STATUS | jq -r '.node_info.network' 2> /dev/null || echo "???") && [ -z "$KIRA_NETWORK" ] && KIRA_NETWORK="???"
-    KIRA_BLOCK=$(echo $NETWORK_STATUS | jq -r '.sync_info.latest_block_height' 2> /dev/null || echo "???") && [ -z "$KIRA_BLOCK" ] && KIRA_BLOCK="???"
     [ "$LOCAL_IP" == "172.17.0.1" ] && LOCAL_IP="0.0.0.0"
     [ "$LOCAL_IP" == "172.16.0.1" ] && LOCAL_IP="0.0.0.0"
     [ -z "$LOCAL_IP" ] && LOCAL_IP="0.0.0.0"
@@ -116,16 +113,34 @@ while :; do
 
     ALLOWED_OPTIONS="x"
     echo -e "\e[33;1m------------------------------------------------- [mode]"
-    echo "|         KIRA NETWORK MANAGER v0.0.7           : $INFRA_MODE mode"
+    echo "|         KIRA NETWORK MANAGER v0.0.8           : $INFRA_MODE mode"
     echo "|------------ $(date '+%d/%m/%Y %H:%M:%S') --------------|"
     CPU_TMP="CPU: ${CPU_UTIL}${WHITESPACE}"
     RAM_TMP="RAM: ${RAM_UTIL}${WHITESPACE}"
     DISK_TMP="DISK: ${DISK_UTIL}${WHITESPACE}"
+
+    [ ! -z "$CPU_UTIL" ] && [ ! -z "$RAM_UTIL" ] && [ ! -z "$DISK_UTIL" ] && \
     echo -e "|\e[34;1m ${CPU_TMP:0:16}${RAM_TMP:0:18}${DISK_TMP:0:11} \e[33;1m|"
 
-    KIRA_NETWORK="NETWORK: ${KIRA_NETWORK}${WHITESPACE}"
-    KIRA_BLOCK="BLOCKS: ${KIRA_BLOCK}${WHITESPACE}"
-    echo -e "|\e[35;1m ${KIRA_NETWORK:0:22}${KIRA_BLOCK:0:23} \e[33;1m: $STATUS_SOURCE"
+    if [ "${LOADING,,}" == "false" ] ; then
+        KIRA_NETWORK=$(echo $NETWORK_STATUS | jq -r '.NodeInfo.network' 2> /dev/null || echo "???") && [ -z "$KIRA_NETWORK" ] && KIRA_NETWORK="???"
+        ( [ -z "$NETWORK_STATUS" ] || [ "${NETWORK_STATUS,,}" == "null" ] ) && KIRA_NETWORK=$(echo $NETWORK_STATUS | jq -r '.node_info.network' 2> /dev/null || echo "???") && [ -z "$KIRA_NETWORK" ] && KIRA_NETWORK="???"
+        KIRA_BLOCK=$(echo $NETWORK_STATUS | jq -r '.SyncInfo.latest_block_height' 2> /dev/null || echo "???") && [ -z "$KIRA_BLOCK" ] && KIRA_BLOCK="???"
+        ( [ -z "$KIRA_BLOCK" ] || [ "${KIRA_BLOCK,,}" == "null" ] ) && KIRA_BLOCK=$(echo $NETWORK_STATUS | jq -r '.sync_info.latest_block_height' 2> /dev/null || echo "???") && [ -z "$KIRA_BLOCK" ] && KIRA_BLOCK="???"
+
+        if [ -f "$GENESIS_JSON" ] ; then
+            GENESIS_SUM=$(sha256sum $GENESIS_JSON | awk '{ print $1 }')
+            GENESIS_SUM="$(echo $GENESIS_SUM | head -c 4)...$(echo $GENESIS_SUM | tail -c 5)"
+        else
+            GENESIS_SUM="genesis not found"
+        fi
+
+        KIRA_NETWORK_TMP="NETWORK: ${KIRA_NETWORK}${WHITESPACE}"
+        KIRA_BLOCK_TMP="BLOCKS: ${KIRA_BLOCK}${WHITESPACE}"
+        echo -e "|\e[35;1m ${KIRA_NETWORK_TMP:0:22}${KIRA_BLOCK_TMP:0:23} \e[33;1m: $GENESIS_SUM"
+    else
+        KIRA_BLOCK="???"
+    fi
 
     LOCAL_IP="L.IP: $LOCAL_IP                                               "
     [ ! -z "$PUBLIC_IP" ] && PUBLIC_IP="$PUBLIC_IP                          "
@@ -144,6 +159,8 @@ while :; do
         echo -e "|\e[0m\e[31;1m ISSUES DETECTED, NOT ALL CONTAINERS LAUNCHED  \e[33;1m|"
     elif [ "${ALL_CONTAINERS_HEALTHY,,}" != "true" ]; then
         echo -e "|\e[0m\e[31;1m ISSUES DETECTED, INFRASTRUCTURE IS UNHEALTHY  \e[33;1m|"
+    elif [ "${CATCHING_UP,,}" == "true" ] ; then
+        echo -e "|\e[0m\e[33;1m     PLEASE WAIT, NODES ARE CATCHING UP        \e[33;1m|"
     elif [ "${SUCCESS,,}" == "true" ] && [ "${ALL_CONTAINERS_HEALTHY,,}" == "true" ]; then
         echo -e "|\e[0m\e[32;1m     SUCCESS, INFRASTRUCTURE IS HEALTHY        \e[33;1m|"
     else
@@ -167,7 +184,22 @@ while :; do
             [ "${HEALTH_TMP,,}" == "null" ] && HEALTH_TMP="" # do not display
             [ "${name,,}" == "snapshoot" ] && [ "${STATUS_TMP,,}" == "running" ] && STATUS_TMP="$PROGRESS_SNAP"
             [ "${name,,}" == "snapshoot" ] && [ -f "$SCAN_DONE" ] && HEALTH_TMP="" # no need for healthcheck anymore
-            LABEL="| [$i] | Manage $name ($STATUS_TMP)                           "
+
+            if [[ "${name,,}" =~ ^(validator|sentry|priv_sentry|interx)$ ]] && [[ "${STATUS_TMP,,}" =~ ^(running|starting)$ ]] ; then
+                LATEST_BLOCK=$(cat "$STATUS_SCAN_PATH/${name}.sekaid.latest_block_height" 2> /dev/null || echo "")
+                CATCHING_UP=$(cat "$STATUS_SCAN_PATH/${name}.sekaid.catching_up" 2> /dev/null || echo "false")
+                ( [ -z "$LATEST_BLOCK" ] || [ -z "${LATEST_BLOCK##*[!0-9]*}" ] ) && LATEST_BLOCK=0
+
+                if [ "${CATCHING_UP,,}" == "true" ] ; then
+                    STATUS_TMP="syncing : $LATEST_BLOCK"
+                else
+                    STATUS_TMP="$STATUS_TMP : $LATEST_BLOCK"
+                fi
+            fi
+
+            NAME_TMP="${name}${WHITESPACE}"
+            STATUS_TMP="${STATUS_TMP}${WHITESPACE}"
+            LABEL="| [$i] | Manage ${NAME_TMP:0:11} : ${STATUS_TMP:0:21}"
             echo "${LABEL:0:47} : $HEALTH_TMP" && ALLOWED_OPTIONS="${ALLOWED_OPTIONS}${i}"
         done
     else
@@ -203,8 +235,10 @@ while :; do
     [ -z "$OPTION" ] && continue
     [[ "${ALLOWED_OPTIONS,,}" != *"$OPTION"* ]] && continue
 
+    
+
     if [ "${OPTION,,}" != "x" ] && [[ $OPTION != ?(-)+([0-9]) ]] ; then
-        ACCEPT="" && while [ "${ACCEPT,,}" != "y" ] && [ "${ACCEPT,,}" != "n" ]; do echo -en "\e[33;1mPress [Y]es to confirm option (${OPTION^^}) or [N]o to cancel: \e[0m\c" && read -d'' -s -n1 ACCEPT && echo ""; done
+        ACCEPT="" && while ! [[ "${ACCEPT,,}" =~ ^(y|n)$ ]] ; do echoNWarn "Press [Y]es to confirm option (${OPTION^^}) or [N]o to cancel: " && read -d'' -s -n1 ACCEPT && echo ""; done
         [ "${ACCEPT,,}" == "n" ] && echo -e "\nWARINIG: Operation was cancelled\n" && sleep 1 && continue
         echo ""
     fi

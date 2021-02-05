@@ -1,5 +1,6 @@
 #!/bin/bash
 set +e && source "/etc/profile" &>/dev/null && set -e
+exec 2>&1
 set -x
 
 HALT_CHECK="${COMMON_DIR}/halt"
@@ -39,7 +40,8 @@ if [ "$INDEX_STATUS_CODE" -ne "200" ]; then
 fi
 
 BLOCK_HEIGHT_FILE="$SELF_LOGS/latest_block_height.txt" && touch $BLOCK_HEIGHT_FILE
-HEIGHT=$(curl http://interx:11000/api/status 2>/dev/null | jq -r '.sync_info.latest_block_height' 2>/dev/null || echo "")
+HEIGHT=$(curl http://interx:11000/api/kira/status 2>/dev/null | jq -rc '.SyncInfo.latest_block_height' 2>/dev/null || echo "")
+( [ -z "${HEIGHT}" ] || [ "${HEIGHT,,}" == "null" ] ) && HEIGHT=$(curl http://interx:11000/api/kira/status 2>/dev/null | jq -rc '.sync_info.latest_block_height' 2>/dev/null || echo "")
 PREVIOUS_HEIGHT=$(cat $BLOCK_HEIGHT_FILE)
 
 if [ -z "$HEIGHT" ] || [ -z "${HEIGHT##*[!0-9]*}" ]; then # not a number
@@ -62,3 +64,4 @@ else
 fi
 
 echo "INFO: Latest Block Height: $HEIGHT"
+exit 0

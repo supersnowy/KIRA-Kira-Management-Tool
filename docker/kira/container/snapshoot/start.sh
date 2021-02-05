@@ -1,12 +1,16 @@
 #!/bin/bash
-
 exec 2>&1
-set -e
+set +e && source "/etc/profile" &>/dev/null && set -e
 set -x
 
 echo "INFO: Staring snapshoot v0.0.3"
 
 EXECUTED_CHECK="$COMMON_DIR/executed"
+
+SNAP_FILE="$COMMON_DIR/snap.zip"
+DATA_DIR="$SEKAID_HOME/data"
+LOCAL_GENESIS="$SEKAID_HOME/config/genesis.json"
+COMMON_GENESIS="$COMMON_DIR/genesis.json"
 
 SNAP_STATUS="$SNAP_DIR/status"
 SNAP_DONE="$SNAP_STATUS/done"
@@ -28,7 +32,7 @@ while ! ping -c1 sentry &>/dev/null; do
 done
 echo "INFO: Sentry IP Found: $(getent hosts sentry | awk '{ print $1 }')"
 
-while [ ! -f "$SNAP_FILE" ] && [ ! -f "$COMMON_DIR/genesis.json" ]; do
+while [ ! -f "$SNAP_FILE" ] && [ ! -f "$COMMON_GENESIS" ]; do
   echo "INFO: Waiting for genesis file to be provisioned... ($(date))"
   sleep 5
 done
@@ -36,11 +40,6 @@ done
 echo "INFO: Sucess, genesis file was found!"
 
 if [ ! -f "$EXECUTED_CHECK" ]; then
-  SNAP_FILE="$COMMON_DIR/snap.zip"
-  DATA_DIR="$SEKAID_HOME/data"
-  LOCAL_GENESIS="$SEKAID_HOME/config/genesis.json"
-  COMMON_GENESIS="$COMMON_DIR/genesis.json"
-
   rm -rfv $SEKAID_HOME
   mkdir -p $SEKAID_HOME/config/
 
@@ -70,7 +69,7 @@ if [ ! -f "$EXECUTED_CHECK" ]; then
   fi
 
   rm -fv $LOCAL_GENESIS
-  cp -a -v $COMMON_GENESIS $LOCAL_GENESIS # recover genesis from common folder
+  cp -a -v -f $COMMON_GENESIS $LOCAL_GENESIS # recover genesis from common folder
 
   echo "0" > $SNAP_PROGRESS
   touch $EXECUTED_CHECK
@@ -85,8 +84,9 @@ LAST_SNAP_BLOCK=-1
 i=0
 while : ; do
   echo "INFO: Checking node status..."
-  SNAP_STATUS=$(sekaid status 2> /dev/null | jq -r '.' 2> /dev/null || echo "")
-  SNAP_BLOCK=$(echo $SNAP_STATUS | jq -r '.sync_info.latest_block_height' 2> /dev/null || echo "") && [ -z "$SNAP_BLOCK" ] && SNAP_BLOCK="0"
+  SNAP_STATUS=$(sekaid status 2>&1 | jq -r '.' 2> /dev/null || echo "")
+  SNAP_BLOCK=$(echo $SNAP_STATUS | jq -r '.SyncInfo.latest_block_height' 2> /dev/null || echo "") && [ -z "$SNAP_BLOCK" ] && SNAP_BLOCK="0"
+  ( [ -z "${SNAP_BLOCK}" ] || [ "${SNAP_BLOCK,,}" == "null" ] ) && SNAP_BLOCK=$(echo $SNAP_STATUS | jq -r '.sync_info.latest_block_height' 2> /dev/null || echo "") && [ -z "$SNAP_BLOCK" ] && SNAP_BLOCK="0"
 
   # sve progress only if status is available or block is diffrent then 0
   [ "$SNAP_BLOCK" != "0" ] && echo $(echo "scale=2; ( ( 100 * $SNAP_BLOCK ) / $HALT_HEIGHT )" | bc) > $SNAP_PROGRESS

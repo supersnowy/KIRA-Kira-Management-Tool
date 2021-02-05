@@ -1,5 +1,6 @@
 #!/bin/bash
 set +e && source "/etc/profile" &>/dev/null && set -e
+source $KIRA_MANAGER/utils.sh
 # quick edit: FILE="$KIRA_MANAGER/containers/start-snapshoot.sh" && rm $FILE && nano $FILE && chmod 555 $FILE
 
 set -x
@@ -13,28 +14,31 @@ CONTAINER_NAME="snapshoot"
 SNAP_STATUS="$KIRA_SNAP/status"
 COMMON_PATH="$DOCKER_COMMON/$CONTAINER_NAME"
 COMMON_LOGS="$COMMON_PATH/logs"
-GENESIS_SOURCE="/root/.simapp/config/genesis.json"
+HALT_FILE="$COMMON_PATH/halt"
+GENESIS_SOURCE="$SEKAID_HOME/config/genesis.json"
 SNAP_DESTINATION="$COMMON_PATH/snap.zip"
 
 CPU_CORES=$(cat /proc/cpuinfo | grep processor | wc -l || echo "0")
 RAM_MEMORY=$(grep MemTotal /proc/meminfo | awk '{print $2}' || echo "0")
-CPU_RESERVED=$(echo "scale=2; ( $CPU_CORES / 4 )" | bc)
-RAM_RESERVED="$(echo "scale=0; ( $RAM_MEMORY / 4 ) / 1024 " | bc)m"
+CPU_RESERVED=$(echo "scale=2; ( $CPU_CORES / 5 )" | bc)
+RAM_RESERVED="$(echo "scale=0; ( $RAM_MEMORY / 5 ) / 1024 " | bc)m"
 
 rm -fvr "$SNAP_STATUS"
 mkdir -p "$SNAP_STATUS" "$COMMON_LOGS"
 
-SENTRY_STATUS=$(docker exec -i "sentry" sekaid status 2> /dev/null | jq -r '.' 2> /dev/null || echo "")
+SENTRY_STATUS=$(curl 127.0.0.1:$KIRA_SENTRY_RPC_PORT/status 2> /dev/null | jq -rc '.result' 2> /dev/null || echo "")
 SENTRY_CATCHING_UP=$(echo $SENTRY_STATUS | jq -r '.sync_info.catching_up' 2> /dev/null || echo "") && [ -z "$SENTRY_CATCHING_UP" ] && SENTRY_CATCHING_UP="true"
 SENTRY_NETWORK=$(echo $SENTRY_STATUS | jq -r '.node_info.network' 2> /dev/null || echo "")
 
-if [ "${SENTRY_CATCHING_UP,,}" != "false" ] || [ -z "$SENTRY_NETWORK" ] ; then
-    echo "INFO: Failed to snapshoot state, public sentry is still catching up..."
+if [ "${SENTRY_CATCHING_UP,,}" != "false" ] || [ -z "$SENTRY_NETWORK" ] || [ "${SENTRY_NETWORK,,}" == "null" ] ; then
+    echo "INFO: Failed to snapshoot state, public sentry is still catching up or network was not found..."
     exit 1
 fi
 
 if [ $MAX_HEIGHT -le 0 ] ; then
-    SENTRY_BLOCK=$(echo $SENTRY_STATUS | jq -r '.sync_info.latest_block_height' 2> /dev/null || echo "") && [ -z "$SENTRY_BLOCK" ] && SENTRY_BLOCK="0"
+    SENTRY_BLOCK=$(echo $SENTRY_STATUS | jq -r '.sync_info.latest_block_height' 2> /dev/null || echo "")
+    ( [ -z "$SENTRY_BLOCK" ] || [ "${SENTRY_BLOCK,,}" == "null" ] ) && SENTRY_BLOCK=$(echo $SENTRY_STATUS | jq -r '.SyncInfo.latest_block_height' 2> /dev/null || echo "")
+    ( [ -z "$SENTRY_BLOCK" ] || [ "${SENTRY_BLOCK,,}" == "null" ] ) && SENTRY_BLOCK="0"
     MAX_HEIGHT=$SENTRY_BLOCK
 fi
 
@@ -71,12 +75,15 @@ $KIRA_SCRIPTS/container-delete.sh "$CONTAINER_NAME"
 
 echo "INFO: Setting up $CONTAINER_NAME config vars..." # * Config ~/configs/config.toml
 SENTRY_SEED=$(echo "${SENTRY_NODE_ID}@sentry:$DEFAULT_P2P_PORT" | xargs | tr -d '\n' | tr -d '\r')
+PRIV_SENTRY_SEED=$(echo "${PRIV_SENTRY_NODE_ID}@priv_sentry:$KIRA_PRIV_SENTRY_P2P_PORT" | xargs | tr -d '\n' | tr -d '\r')
+CFG_seeds="tcp://$SENTRY_SEED,tcp://$PRIV_SENTRY_SEED"
+CFG_persistent_peers=""
 
 echo "INFO: Copy genesis file from sentry into snapshoot container common direcotry..."
 docker cp -a sentry:$GENESIS_SOURCE $COMMON_PATH
 
 # cleanup
-rm -f -v "$COMMON_LOGS/healthcheck.log" "$COMMON_LOGS/start.log" "$COMMON_PATH/executed"
+rm -f -v "$COMMON_LOGS/start.log" "$COMMON_PATH/executed" "$HALT_FILE"
 
 echo "INFO: Starting $CONTAINER_NAME node..."
 
@@ -92,14 +99,14 @@ docker run -d \
     -e SNAP_FILENAME="$SNAP_FILENAME" \
     -e NETWORK_NAME="$NETWORK_NAME" \
     -e CFG_moniker="KIRA ${CONTAINER_NAME^^} NODE" \
-    -e CFG_seed="$SENTRY_SEED" \
+    -e CFG_seed="$CFG_seeds" \
+    -e CFG_persistent_peers="$CFG_persistent_peers" \
     -e CFG_grpc_laddr="tcp://127.0.0.1:$DEFAULT_GRPC_PORT" \
     -e CFG_rpc_laddr="tcp://127.0.0.1:$DEFAULT_RPC_PORT" \
     -e CFG_p2p_laddr="tcp://0.0.0.0:$DEFAULT_P2P_PORT" \
-    -e CFG_persistent_peers="tcp://$SENTRY_SEED" \
     -e CFG_private_peer_ids="$VALIDATOR_NODE_ID,$SNAPSHOOT_NODE_ID,$SENTRY_NODE_ID,$PRIV_SENTRY_NODE_ID" \
     -e CFG_unconditional_peer_ids="$SENTRY_NODE_ID" \
-    -e CFG_pex="false" \
+    -e CFG_pex="true" \
     -e CFG_addr_book_strict="false" \
     -e CFG_version="v2" \
     -e CFG_seed_mode="false" \
@@ -107,12 +114,22 @@ docker run -d \
     -e CFG_max_num_outbound_peers="0" \
     -e CFG_max_num_inbound_peers="1" \
     -e NODE_TYPE=$CONTAINER_NAME \
+    -e VALIDATOR_MIN_HEIGHT="$VALIDATOR_MIN_HEIGHT" \
     -v $COMMON_PATH:/common \
     -v $KIRA_SNAP:/snap \
     kira:latest # use sentry image as base
 
 echo "INFO: Waiting for $CONTAINER_NAME node to start..."
 CONTAINER_CREATED="true" && $KIRAMGR_SCRIPTS/await-sentry-init.sh "$CONTAINER_NAME" "$SNAPSHOOT_NODE_ID" || CONTAINER_CREATED="false"
+
+echoInfo "INFO: Checking genesis SHA256 hash"
+TEST_SHA256=$(docker exec -i "$CONTAINER_NAME" sha256sum $SEKAID_HOME/config/genesis.json | awk '{ print $1 }' | xargs || echo "")
+if [ ! -z "$TEST_SHA256" ] && [ "$TEST_SHA256" != "$GENESIS_SHA256" ] ; then
+    echoErr "ERROR: Expected genesis checksum to be '$GENESIS_SHA256' but got '$TEST_SHA256'"
+    exit 1
+else
+    echoInfo "INFO: Genesis checksum '$TEST_SHA256' was verified sucessfully!"
+fi
 
 set +x
 if [ "${CONTAINER_CREATED,,}" != "true" ] ; then

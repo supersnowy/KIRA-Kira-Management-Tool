@@ -1,20 +1,29 @@
 #!/bin/bash
-
+set +e && source "/etc/profile" &>/dev/null && set -e
 exec 2>&1
-set -e
 set -x
 
-echo "INFO: Staring sentry setup v0.0.3"
+echo "INFO: Staring sentry setup v0.0.4"
 
 EXECUTED_CHECK="$COMMON_DIR/executed"
+SNAP_FILE="$COMMON_DIR/snap.zip"
+DATA_DIR="$SEKAID_HOME/data"
+LOCAL_GENESIS="$SEKAID_HOME/config/genesis.json"
+COMMON_GENESIS="$COMMON_DIR/genesis.json"
+GRPC_ADDRESS=$(echo "$CFG_grpc_laddr" | sed 's/tcp\?:\/\///')
 
-while ! ping -c1 validator &>/dev/null; do
-  echo "INFO: Waiting for ping response form validator node... ($(date))"
-  sleep 5
-done
-echo "INFO: Validator IP Found: $(getent hosts validator | awk '{ print $1 }')"
+if [ "${EXTERNAL_SYNC,,}" != "true" ] ; then
+    echo "INFO: Checking if sentry can be synchronized from the validator node..."
+    while ! ping -c1 validator &>/dev/null; do
+      echo "INFO: Waiting for ping response form validator node... ($(date))"
+      sleep 5
+    done
+    echo "INFO: Validator IP Found: $(getent hosts validator | awk '{ print $1 }')"
+else
+    echo "INFO: Node will be synchronised from external networks"
+fi
 
-while [ -f "$SNAP_FILE" ] && [ ! -f "$COMMON_DIR/genesis.json" ]; do
+while [ ! -f "$SNAP_FILE" ] && [ ! -f "$COMMON_GENESIS" ]; do
   echo "INFO: Waiting for genesis file to be provisioned... ($(date))"
   sleep 5
 done
@@ -22,11 +31,6 @@ done
 echo "INFO: Sucess, genesis file was found!"
 
 if [ ! -f "$EXECUTED_CHECK" ]; then
-  SNAP_FILE="$COMMON_DIR/snap.zip"
-  DATA_DIR="$SEKAID_HOME/data"
-  LOCAL_GENESIS="$SEKAID_HOME/config/genesis.json"
-  COMMON_GENESIS="$COMMON_DIR/genesis.json"
-
   rm -rfv $SEKAID_HOME
   mkdir -p $SEKAID_HOME/config/
 
@@ -54,12 +58,10 @@ if [ ! -f "$EXECUTED_CHECK" ]; then
   fi
 
   rm -fv $LOCAL_GENESIS
-  cp -a -v $COMMON_GENESIS $LOCAL_GENESIS # recover genesis from common folder
+  cp -a -v -f $COMMON_GENESIS $LOCAL_GENESIS # recover genesis from common folder
 
   touch $EXECUTED_CHECK
 fi
 
 $SELF_CONTAINER/configure.sh
-
-GRPC_ADDRESS=$(echo "$CFG_grpc_laddr" | sed 's/tcp\?:\/\///')
 sekaid start --home=$SEKAID_HOME --grpc.address="$GRPC_ADDRESS" --trace
