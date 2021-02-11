@@ -1,5 +1,6 @@
 #!/bin/bash
 set +e && source "/etc/profile" &>/dev/null && set -e
+source $KIRA_MANAGER/utils.sh
 # quick edit: FILE="$KIRA_MANAGER/kira/kira-networking.sh" && rm $FILE && nano $FILE && chmod 555 $FILE
 
 # ports have 3 diffrent configuration states, public, disabled & custom
@@ -7,10 +8,6 @@ WHITESPACE="                                                     "
 PORTS=($KIRA_FRONTEND_PORT $KIRA_SENTRY_GRPC_PORT $KIRA_SENTRY_P2P_PORT $KIRA_SENTRY_RPC_PORT $KIRA_PRIV_SENTRY_P2P_PORT $KIRA_INTERX_PORT)
 
 PORT_CFG_DIR="$KIRA_CONFIGS/ports/$PORT"
-PUBLIC_PEERS="$KIRA_CONFIGS/public_peers"
-PRIVATE_PEERS="$KIRA_CONFIGS/private_peers"
-PUBLIC_SEEDS="$KIRA_CONFIGS/public_seeds"
-PRIVATE_SEEDS="$KIRA_CONFIGS/private_seeds"
 mkdir -p "$PORT_CFG_DIR"
 touch "$PUBLIC_PEERS" "$PRIVATE_PEERS" "$PUBLIC_SEEDS" "$PRIVATE_SEEDS"
 
@@ -65,7 +62,7 @@ echo -e "\e[37;1m--------------------------------------------------"
     [[ "${ALLOWED_OPTIONS,,}" != *"$OPTION"* ]] && continue
 
     if [ "${OPTION,,}" != "x" ] && [ "${OPTION,,}" != "p" ] && [ "${OPTION,,}" != "s" ] && [[ $OPTION != ?(-)+([0-9]) ]] ; then
-        ACCEPT="" && while [ "${ACCEPT,,}" != "y" ] && [ "${ACCEPT,,}" != "n" ]; do echo -en "\e[33;1mPress [Y]es to confirm option (${OPTION^^}) or [N]o to cancel: \e[0m\c" && read -d'' -s -n1 ACCEPT && echo ""; done
+        ACCEPT="." && while ! [[ "${ACCEPT,,}" =~ ^(y|n)$ ]] ; do echoNErr "Press [Y]es to confirm option (${OPTION^^}) or [N]o to cancel: " && read -d'' -s -n1 ACCEPT && echo ""; done
         [ "${ACCEPT,,}" == "n" ] && echo -e "\nWARINIG: Operation was cancelled\n" && sleep 1 && continue
         echo ""
     fi
@@ -106,7 +103,7 @@ echo -e "\e[37;1m--------------------------------------------------"
     elif [ "${OPTION,,}" == "s" ] || [ "${OPTION,,}" == "p" ] ; then
         [ "${OPTION,,}" == "s" ] && TYPE="seeds" && TARGET="Seed Nodes"
         [ "${OPTION,,}" == "p" ] && TYPE="peers" && TARGET="Persistent Peers"
-        SELECT="." && while [ "${SELECT,,}" != "p" ] && [ "${SELECT,,}" != "v" ] ; do echo -en "\e[31;1mChoose to list [P]ublic or Pri[V]ate $TARGET: \e[0m\c" && read -d'' -s -n1 SELECT && echo ""; done
+        SELECT="." && while ! [[ "${SELECT,,}" =~ ^(p|v)$ ]] ; do echo -en "\e[31;1mChoose to list [P]ublic or Pri[V]ate $TARGET: \e[0m\c" && read -d'' -s -n1 SELECT && echo ""; done
         [ "${SELECT,,}" == "p" ] && EXPOSURE="public" && CONTAINER="sentry"
         [ "${SELECT,,}" == "v" ] && EXPOSURE="private" && CONTAINER="priv_sentry"
         FILE="$PORT_CFG_DIR/${EXPOSURE}_${TYPE}"
@@ -116,7 +113,7 @@ echo -e "\e[37;1m--------------------------------------------------"
         cp -a -v -f "$FILE" "$COMMON_PEERS_PATH"
 
         echo "INFO: To apply changes you will have to restart your $EXPOSURE facing container ($CONTAINER)"
-        SELECT="." && while [ "${SELECT,,}" != "r" ] && [ "${SELECT,,}" != "c" ] ; do echo -en "\e[31;1mChoose to [R]estart $CONTAINER container or [C]ontinue: \e[0m\c" && read -d'' -s -n1 SELECT && echo ""; done
+        SELECT="." && while ! [[ "${SELECT,,}" =~ ^(r|c)$ ]]  ; do echo -en "\e[31;1mChoose to [R]estart $CONTAINER container or [C]ontinue: \e[0m\c" && read -d'' -s -n1 SELECT && echo ""; done
         [ "${SELECT,,}" == "c" ] && continue
         
         echo "INFO: Re-starting $name container..."

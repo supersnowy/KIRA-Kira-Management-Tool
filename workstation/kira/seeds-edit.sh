@@ -55,12 +55,12 @@ while : ; do
     echo -e "\e[0m\e[33;1m-----------------------------------------------------------\e[0m\n"
     echo "INFO: All $i ${TARGET^^} were displayed"
          
-    SELECT="." && while [ "${SELECT,,}" != "w" ] && [ "${SELECT,,}" != "d" ] && [ "${SELECT,,}" != "s" ] && [ "${SELECT,,}" != "a" ] && [ "${SELECT,,}" != "r" ] && [ "${SELECT,,}" != "s" ] ; do echo -en "\e[31;1mChoose to [A]dd, [D]elete, [W]ipe, [R]efresh or [S]kip making changes to the $TARGET list: \e[0m\c" && read -d'' -s -n1 SELECT && echo ""; done
+    SELECT="." && while ! [[ "${SELECT,,}" =~ ^(a|d|w|r|s)$ ]] ; do echoNErr "Choose to [A]dd, [D]elete, [W]ipe, [R]efresh or [S]kip making changes to the $TARGET list: " && read -d'' -s -n1 SELECT && echo ""; done
     [ "${SELECT,,}" == "r" ] && continue
     [ "${SELECT,,}" == "s" ] && break
              
     if [ "${SELECT,,}" == "w" ] ; then
-        SELECT="." && while [ "${SELECT,,}" != "y" ] && [ "${SELECT,,}" != "n" ] ; do echo -en "\e[31;1mAre you absolutely sure you want to DELETE all ${TARGET^^}? (y/n): \e[0m\c" && read -d'' -s -n1 SELECT && echo ""; done
+        SELECT="." && while ! [[ "${SELECT,,}" =~ ^(y|n)$ ]] ; do echoNErr "Are you absolutely sure you want to DELETE all ${TARGET^^}? (y/n): " && read -d'' -s -n1 SELECT && echo ""; done
         echo "INFO: You selected NOT do wipe all ${TARGET^^}"
         [ "${SELECT,,}" != "y" ] && break
         echo "INFO: You selected to delete all ${TARGET^^}"
@@ -71,6 +71,12 @@ while : ; do
     echo ""
     [ "${OPTION,,}" == "s" ] && echo "INFO: ${TARGET^^} should have a format of <node-id>@<dns>:<port>"
     echo -en "\e[31;1mInput comma separated list of $TARGET: \e[0m" && read ADDR_LIST
+
+    if [ -z "$ADDR_LIST" ] ; then
+        echoInfo "INFO: No addresses were specified, try again"
+        continue
+    fi
+
     i=0
     for addr in $(echo $ADDR_LIST | sed "s/,/ /g") ; do
         addr=$(echo "$addr" | xargs) # trim whitespace characters
@@ -83,21 +89,19 @@ while : ; do
         nodeId="" && [[ "$p1" =~ ^[a-f0-9]{40}$ ]] && nodeId="$p1"
         dns="" && [[ "$(echo $p2 | grep -P '(?=^.{4,253}$)(^(?:[a-zA-Z](?:(?:[a-zA-Z0-9\-]){0,61}[a-zA-Z])?\.)+[a-zA-Z]{2,}$)')" == "$p2" ]] && dns="$p2" # DNS regex
         [ -z "$dns" ] && [[ $p2 =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && dns="$p2" # IP is fine too
-        # port must be a number
-        [[ $p3 =~ ^[0-9]+$ ]] && port="$p3" || port=""
-        [ ! -z "$port" ] && (($port < 1 || $port > 65535)) && port=""
+        # port must be a number within the range of <1,65535>
+        port="" && ( [[ $p3 =~ ^[0-9]+$ ]] && (($p3 > 0 || $p3 < 65536)) ) && port="$p3"
 
         # in case of missing node id
         dnsStandalone="" && [[ "$(echo $p1 | grep -P '(?=^.{4,253}$)(^(?:[a-zA-Z](?:(?:[a-zA-Z0-9\-]){0,61}[a-zA-Z])?\.)+[a-zA-Z]{2,}$)')" == "$p1" ]] && dnsStandalone="$p1" # DNS regex
         [ -z "$dnsStandalone" ] && [[ $p1 =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && dnsStandalone="$p1" # IP is fine too
-        # port must be a number
-        [[ $p2 =~ ^[0-9]+$ ]] && port="$p2" || portStandalone="" 
-        [ ! -z "$portStandalone" ] && (($portStandalone < 1 || $portStandalone > 65535)) && portStandalone=""
+        # portStandalone must be a number within the range of <1,65535>
+        portStandalone="" && ( [[ $p2 =~ ^[0-9]+$ ]] && (($p2 > 0 || $p2 < 65536)) ) && portStandalone="$p2"
 
         # if detected missing node id, try to recover it
         if [ ! -z "${dnsStandalone}" ] ; then
             echoWarn "WARNING:'$addr' is NOT a valid $TARGET address but a standalone IP or DNS"
-            SVAL="." && while [ "${SVAL,,}" != "y" ] && [ "${SVAL,,}" != "n" ] ; do echo -en "\e[31;1mDo you want to scan '$dnsStandalone' and attempt to acquire a public node id? (y/n): \e[0m\c" && read -d'' -s -n1 SVAL && echo ""; done
+            SVAL="." && while ! [[ "${SVAL,,}" =~ ^(y|n)$ ]] ; do echo -en "\e[31;1mDo you want to scan '$dnsStandalone' and attempt to acquire a public node id? (y/n): \e[0m\c" && read -d'' -s -n1 SVAL && echo ""; done
             [ "${SVAL,,}" != "y" ] && echo "INFO: Address '$addr' will NOT be added to ${TARGET^^} list" && continue
 
             # try to get node ID from the RPC or INTERX
@@ -117,7 +121,7 @@ while : ; do
             if [ "${SELECT,,}" == "a" ] ; then
                 if ! timeout 1 ping -c1 $dns &>/dev/null ; then 
                     echo "WARNING: Node with address '$dns' is NOT reachable"
-                    SELECT="." && while [ "${SELECT,,}" != "y" ] && [ "${SELECT,,}" != "n" ] ; do echo -en "\e[31;1mAre you absolutely sure you want to add '$dns' to ${TARGET^^} list? (y/n): \e[0m\c" && read -d'' -s -n1 SELECT && echo ""; done
+                    SELECT="." && while ! [[ "${SELECT,,}" =~ ^(y|n)$ ]] ; do echo -en "\e[31;1mAre you absolutely sure you want to add '$dns' to ${TARGET^^} list? (y/n): \e[0m\c" && read -d'' -s -n1 SELECT && echo ""; done
                     [ "${SELECT,,}" != "y" ] && echo "INFO: Address '$addr' will NOT be added to ${TARGET^^} list" && continue
                 fi
                 echo "INFO: Adding address to the $TARGET list..."

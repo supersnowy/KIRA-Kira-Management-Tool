@@ -75,14 +75,14 @@ while : ; do
             fi
 
             SEKAID_STATUS=$(cat "${SCAN_PATH_VARS}.sekaid.status" 2> /dev/null | jq -r '.' 2>/dev/null || echo "")
-            TMP_VAR=$(echo $SEKAID_STATUS | jq -r '.SyncInfo.latest_block_height' 2> /dev/null || echo "0")
-            ( [ -z "$TMP_VAR" ] || [ "${TMP_VAR,,}" == "null" ] ) && TMP_VAR=$(echo $SEKAID_STATUS | jq -r '.sync_info.latest_block_height' 2> /dev/null || echo "0")
-            [[ $TMP_VAR =~ ^[0-9]+$ ]] && KIRA_BLOCK_TMP="$TMP_VAR" || KIRA_BLOCK_TMP="0"
+            KIRA_BLOCK_TMP=$(echo $SEKAID_STATUS | jq -r '.SyncInfo.latest_block_height' 2> /dev/null || echo "")
+            [[ ! $KIRA_BLOCK_TMP =~ ^[0-9]+$ ]] && KIRA_BLOCK_TMP=$(echo $SEKAID_STATUS | jq -r '.sync_info.latest_block_height' 2> /dev/null || echo "")
+            [[ ! $KIRA_BLOCK_TMP =~ ^[0-9]+$ ]] && KIRA_BLOCK_TMP="0"
             SYNCING_TMP=$(echo $SEKAID_STATUS | jq -r '.SyncInfo.catching_up' 2> /dev/null || echo "false")
             ( [ -z "$SYNCING_TMP" ] || [ "${SYNCING_TMP,,}" == "null" ] ) && SYNCING_TMP=$(echo $SEKAID_STATUS | jq -r '.sync_info.catching_up' 2> /dev/null || echo "false")
 
-            # if some other node then snapshoot is syncig then infra is not ready
-            [ "${name,,}" != "snapshoot" ] && [ "${SYNCING_TMP,,}" == "true" ] && CATCHING_UP="true"
+            # if some other node then snapshot is syncig then infra is not ready
+            [ "${name,,}" != "snapshot" ] && [ "${SYNCING_TMP,,}" == "true" ] && CATCHING_UP="true"
 
             STATUS_TMP="STATUS_$name" && STATUS_TMP="${!STATUS_TMP}"
             HEALTH_TMP="HEALTH_$name" && HEALTH_TMP="${!HEALTH_TMP}"
@@ -90,7 +90,7 @@ while : ; do
             [ "${STATUS_TMP,,}" != "exited" ] && ALL_CONTAINERS_STOPPED="false"
             [ "${STATUS_TMP,,}" != "paused" ] && ALL_CONTAINERS_PAUSED="false"
             [ "${name,,}" == "registry" ] && continue
-            [ "${name,,}" == "snapshoot" ] && continue
+            [ "${name,,}" == "snapshot" ] && continue
             [ "${HEALTH_TMP,,}" != "healthy" ] && ALL_CONTAINERS_HEALTHY="false"
 
             if [ "${STATUS_TMP,,}" == "running" ] && [[ "${name,,}" =~ ^(validator|sentry)$ ]] ; then
@@ -126,7 +126,8 @@ while : ; do
         KIRA_NETWORK=$(echo $NETWORK_STATUS | jq -r '.NodeInfo.network' 2> /dev/null || echo "???") && [ -z "$KIRA_NETWORK" ] && KIRA_NETWORK="???"
         ( [ -z "$NETWORK_STATUS" ] || [ "${NETWORK_STATUS,,}" == "null" ] ) && KIRA_NETWORK=$(echo $NETWORK_STATUS | jq -r '.node_info.network' 2> /dev/null || echo "???") && [ -z "$KIRA_NETWORK" ] && KIRA_NETWORK="???"
         KIRA_BLOCK=$(echo $NETWORK_STATUS | jq -r '.SyncInfo.latest_block_height' 2> /dev/null || echo "???") && [ -z "$KIRA_BLOCK" ] && KIRA_BLOCK="???"
-        ( [ -z "$KIRA_BLOCK" ] || [ "${KIRA_BLOCK,,}" == "null" ] ) && KIRA_BLOCK=$(echo $NETWORK_STATUS | jq -r '.sync_info.latest_block_height' 2> /dev/null || echo "???") && [ -z "$KIRA_BLOCK" ] && KIRA_BLOCK="???"
+        ( [ -z "$KIRA_BLOCK" ] || [ "${KIRA_BLOCK,,}" == "null" ] || [[ ! $KIRA_BLOCK =~ ^[0-9]+$ ]] ) && KIRA_BLOCK=$(echo $NETWORK_STATUS | jq -r '.sync_info.latest_block_height' 2> /dev/null || echo "???") && [ -z "$KIRA_BLOCK" ] && KIRA_BLOCK="???"
+        [[ ! $KIRA_BLOCK =~ ^[0-9]+$ ]] && KIRA_BLOCK="???"
 
         if [ -f "$GENESIS_JSON" ] ; then
             GENESIS_SUM=$(sha256sum $GENESIS_JSON | awk '{ print $1 }')
@@ -144,13 +145,16 @@ while : ; do
 
     LOCAL_IP="L.IP: $LOCAL_IP                                               "
     [ ! -z "$PUBLIC_IP" ] && PUBLIC_IP="$PUBLIC_IP                          "
-    [ -z "$PUBLIC_IP" ] && echo -e "|\e[35;1m ${LOCAL_IP:0:22}PUB.IP: \e[31;1mdisconnected\e[33;1m    : $IFACE"
-    [ ! -z "$PUBLIC_IP" ] && echo -e "|\e[35;1m ${LOCAL_IP:0:22}PUB.IP: ${PUBLIC_IP:0:15}\e[33;1m : $IFACE"
+    [ -z "$PUBLIC_IP" ] && \
+    echo -e "|\e[35;1m ${LOCAL_IP:0:22}PUB.IP: \e[31;1mdisconnected\e[33;1m    : $IFACE" || \
+    echo -e "|\e[35;1m ${LOCAL_IP:0:22}PUB.IP: ${PUBLIC_IP:0:15}\e[33;1m : $IFACE"
 
-    if [ -f "$KIRA_SNAP_PATH" ] ; then # snapshoot is present 
-        SNAP_FILENAME="SNAPSHOOT: $(basename -- "$KIRA_SNAP_PATH")${WHITESPACE}"
+    if [ -f "$KIRA_SNAP_PATH" ] ; then # snapshot is present 
+        SNAP_FILENAME="SNAPSHOT: $(basename -- "$KIRA_SNAP_PATH")${WHITESPACE}"
         SNAP_SHA256=$(sha256sum $KIRA_SNAP_PATH | awk '{ print $1 }')
-        echo -e "|\e[35;1m ${SNAP_FILENAME:0:45} \e[33;1m: $(echo $SNAP_SHA256 | head -c 4)...$(echo $SNAP_SHA256 | tail -c 5)"
+        [ "${SNAP_EXPOSE,,}" == "true" ] && \
+        echo -e "|\e[32;1m ${SNAP_FILENAME:0:45} \e[33;1m: $(echo $SNAP_SHA256 | head -c 4)...$(echo $SNAP_SHA256 | tail -c 5)" || \
+        echo -e "|\e[31;1m ${SNAP_FILENAME:0:45} \e[33;1m: $(echo $SNAP_SHA256 | head -c 4)...$(echo $SNAP_SHA256 | tail -c 5)"
     fi
 
     if [ "${LOADING,,}" == "true" ] ; then
@@ -182,8 +186,7 @@ while : ; do
             STATUS_TMP="STATUS_$name" && STATUS_TMP="${!STATUS_TMP}"
             HEALTH_TMP="HEALTH_$name" && HEALTH_TMP="${!HEALTH_TMP}"
             [ "${HEALTH_TMP,,}" == "null" ] && HEALTH_TMP="" # do not display
-            [ "${name,,}" == "snapshoot" ] && [ "${STATUS_TMP,,}" == "running" ] && STATUS_TMP="$PROGRESS_SNAP"
-            [ "${name,,}" == "snapshoot" ] && [ -f "$SCAN_DONE" ] && HEALTH_TMP="" # no need for healthcheck anymore
+            [ "${name,,}" == "snapshot" ] && [ "${STATUS_TMP,,}" == "running" ] && STATUS_TMP="$PROGRESS_SNAP"
 
             if [[ "${name,,}" =~ ^(validator|sentry|priv_sentry|interx)$ ]] && [[ "${STATUS_TMP,,}" =~ ^(running|starting)$ ]] ; then
                 LATEST_BLOCK=$(cat "$STATUS_SCAN_PATH/${name}.sekaid.latest_block_height" 2> /dev/null || echo "")
@@ -213,19 +216,24 @@ while : ; do
     echo "|-----------------------------------------------|"
     if [ "$CONTAINERS_COUNT" != "0" ] && [ "${LOADING,,}" == "false" ] ; then
         [ "${ALL_CONTAINERS_PAUSED,,}" == "false" ] && \
-            echo "| [P] | PAUSE All Containers                    |" && ALLOWED_OPTIONS="${ALLOWED_OPTIONS}p"
-        [ "${ALL_CONTAINERS_PAUSED,,}" == "true" ] && \
+            echo "| [P] | PAUSE All Containers                    |" && ALLOWED_OPTIONS="${ALLOWED_OPTIONS}p" || \
             echo "| [P] | Un-PAUSE All Containers                 |" && ALLOWED_OPTIONS="${ALLOWED_OPTIONS}p"
         echo "| [R] | RESTART All Containers                  |" && ALLOWED_OPTIONS="${ALLOWED_OPTIONS}r"
         [ "${ALL_CONTAINERS_STOPPED,,}" == "false" ] && \
-            echo "| [S] | STOP All Containers                     |" && ALLOWED_OPTIONS="${ALLOWED_OPTIONS}s"
-        [ "${ALL_CONTAINERS_STOPPED,,}" == "true" ] && \
+            echo "| [S] | STOP All Containers                     |" && ALLOWED_OPTIONS="${ALLOWED_OPTIONS}s" || \
             echo "| [S] | START All Containers                    |" && ALLOWED_OPTIONS="${ALLOWED_OPTIONS}s"
         echo "|-----------------------------------------------|"
     fi
     
     [ $ESSENTIAL_CONTAINERS_COUNT -ge 2 ] && \
     echo "| [B] | BACKUP Chain State                      |" && ALLOWED_OPTIONS="${ALLOWED_OPTIONS}b"
+
+    if [ ! -z "$KIRA_SNAP_PATH" ] ; then
+        [ "${SNAP_EXPOSE,,}" == "false" ] && \
+        echo "| [E] | EXPOSE Snapshot                        |" && ALLOWED_OPTIONS="${ALLOWED_OPTIONS}e" || \
+        echo "| [E] | Hide EXPOSED Snapshot                  |" && ALLOWED_OPTIONS="${ALLOWED_OPTIONS}e"
+    fi
+
     echo "| [D] | DUMP All Loggs                          |" && ALLOWED_OPTIONS="${ALLOWED_OPTIONS}d"
     echo "| [N] | Manage NETWORKING & Firewall            |" && ALLOWED_OPTIONS="${ALLOWED_OPTIONS}n"
     echo "| [I] | Re-INITALIZE Infrastructure             |" && ALLOWED_OPTIONS="${ALLOWED_OPTIONS}i"
@@ -235,10 +243,8 @@ while : ; do
     [ -z "$OPTION" ] && continue
     [[ "${ALLOWED_OPTIONS,,}" != *"$OPTION"* ]] && continue
 
-    
-
     if [ "${OPTION,,}" != "x" ] && [[ $OPTION != ?(-)+([0-9]) ]] ; then
-        ACCEPT="" && while ! [[ "${ACCEPT,,}" =~ ^(y|n)$ ]] ; do echoNWarn "Press [Y]es to confirm option (${OPTION^^}) or [N]o to cancel: " && read -d'' -s -n1 ACCEPT && echo ""; done
+        ACCEPT="" && while ! [[ "${ACCEPT,,}" =~ ^(y|n)$ ]] ; do echoNErr "Press [Y]es to confirm option (${OPTION^^}) or [N]o to cancel: " && read -d'' -s -n1 ACCEPT && echo ""; done
         [ "${ACCEPT,,}" == "n" ] && echo -e "\nWARINIG: Operation was cancelled\n" && sleep 1 && continue
         echo ""
     fi
@@ -295,7 +301,7 @@ while : ; do
         echo "INFO: Compresing all dumped files..."
         ZIP_FILE="$KIRA_DUMP/kira.zip"
         rm -fv $ZIP_FILE
-        zip -r -q $ZIP_FILE $KIRA_DUMP
+        zip -9 -r -v $ZIP_FILE $KIRA_DUMP
         echo "INFO: All dump files were exported into $ZIP_FILE"
     elif [ "${OPTION,,}" == "s" ] && [ "${ALL_CONTAINERS_STOPPED,,}" != "false" ] ; then
         echo "INFO: Reconnecting all networks..."
@@ -304,7 +310,7 @@ while : ; do
         $KIRA_MANAGER/networking.sh
     elif [ "${OPTION,,}" == "b" ] ; then
         echo "INFO: Backing up blockchain state..."
-        $KIRA_MANAGER/kira/kira-backup.sh || echo "ERROR: Snapshoot failed"
+        $KIRA_MANAGER/kira/kira-backup.sh "$KIRA_BLOCK" || echo "ERROR: Snapshot failed"
         LOADING="true"
         EXECUTED="true"
     elif [ "${OPTION,,}" == "n" ] ; then
@@ -313,6 +319,18 @@ while : ; do
         LOADING="true"
         EXECUTED="true"
         OPTION=""
+    elif [ "${OPTION,,}" == "e" ] ; then
+        if [ "${SNAP_EXPOSE,,}" == "false" ] ; then
+            echo "INFO: Exposing latest snapshot '$KIRA_SNAP_PATH' via INTERX"
+            CDHelper text lineswap --insert="SNAP_EXPOSE=\"true\"" --prefix="SNAP_EXPOSE=" --path=$ETC_PROFILE --append-if-found-not=True
+            echoInfo "INFO: Await few minutes and your snapshot will become available via 0.0.0.0:$KIRA_INTERX_PORT/download/snapshot.zip"
+        else
+            echoInfo "INFO: Ensuring exposed snapshot will be removed..."
+            CDHelper text lineswap --insert="SNAP_EXPOSE=\"false\"" --prefix="SNAP_EXPOSE=" --path=$ETC_PROFILE --append-if-found-not=True
+            echoInfo "INFO: Await few minutes and your snapshot will become unavailable"
+        fi
+        LOADING="true"
+        EXECUTED="true"
     elif [ "${OPTION,,}" == "x" ]; then
         printf "\033c"
         echo "INFO: Stopping kira network scanner..."
@@ -321,10 +339,7 @@ while : ; do
     fi
 
     [ "${LOADING,,}" == "true" ] && rm -fv $SCAN_DONE # trigger re-scan
-
-    if [ "${EXECUTED,,}" == "true" ] && [ ! -z $OPTION ]; then
-        echo -en "\e[31;1mINFO: Option ($OPTION) was executed, press any key to continue...\e[0m" && read -n 1 -s && echo ""
-    fi
+    [ "${EXECUTED,,}" == "true" ] && [ ! -z $OPTION ] && echoNErr "INFO: Option ($OPTION) was executed, press any key to continue..." && read -n 1 -s && echo ""
 
     if [ "${OPTION,,}" == "i" ]; then
         cd $HOME

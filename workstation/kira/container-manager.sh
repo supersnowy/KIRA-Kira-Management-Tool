@@ -59,7 +59,7 @@ while : ; do
         fi
     fi
 
-    if [ "${NAME,,}" == "interx" ] || [ "${NAME,,}" == "validator" ] || [ "${NAME,,}" == "sentry" ] || [ "${NAME,,}" == "priv_sentry" ] || [ "${NAME,,}" == "snapshoot" ] ; then
+    if [ "${NAME,,}" == "interx" ] || [ "${NAME,,}" == "validator" ] || [ "${NAME,,}" == "sentry" ] || [ "${NAME,,}" == "priv_sentry" ] || [ "${NAME,,}" == "snapshot" ] ; then
         SEKAID_STATUS=$(cat "${CONTAINER_STATUS}.sekaid.status" 2> /dev/null | jq -r '.' 2>/dev/null || echo "")
         if [ "${NAME,,}" != "interx" ] ; then 
             KIRA_NODE_ID=$(echo "$SEKAID_STATUS" 2> /dev/null | jq -r '.NodeInfo.id' 2> /dev/null || echo "")
@@ -70,7 +70,7 @@ while : ; do
         [ "${KIRA_NODE_CATCHING_UP,,}" != "true" ] && KIRA_NODE_CATCHING_UP="false"
         KIRA_NODE_BLOCK=$(echo "$SEKAID_STATUS" 2> /dev/null | jq -r '.SyncInfo.latest_block_height' 2> /dev/null || echo "0")
         ( [ -z "$KIRA_NODE_BLOCK" ] || [ "${KIRA_NODE_BLOCK,,}" == "null" ] ) && KIRA_NODE_BLOCK=$(echo "$SEKAID_STATUS" 2> /dev/null | jq -r '.sync_info.latest_block_height' 2> /dev/null || echo "0")
-        [[ $KIRA_NODE_BLOCK =~ ^[0-9]+$ ]] && KIRA_NODE_BLOCK="$KIRA_NODE_BLOCK" || KIRA_NODE_BLOCK="0"
+        [[ ! $KIRA_NODE_BLOCK =~ ^[0-9]+$ ]] && KIRA_NODE_BLOCK="0"
     fi
 
     printf "\033c"
@@ -120,7 +120,7 @@ while : ; do
         echo "|      Repo: ${REPO_TMP:0:38} : $BRANCH"
     fi
 
-    if [ "${NAME,,}" == "snapshoot" ] && [ -f "$SNAP_LATEST" ] ; then
+    if [ "${NAME,,}" == "snapshot" ] && [ -f "$SNAP_LATEST" ] ; then
         LAST_SNAP_FILE="$(cat $SNAP_LATEST)${WHITESPACE}"
         LAST_SNAP_PROGRESS="$(cat $SNAP_PROGRESS 2> /dev/null || echo "") %"
         [ -f "$SNAP_DONE" ] && LAST_SNAP_PROGRESS="done"

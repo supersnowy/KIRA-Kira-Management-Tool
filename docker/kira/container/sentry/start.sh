@@ -14,7 +14,7 @@ GRPC_ADDRESS=$(echo "$CFG_grpc_laddr" | sed 's/tcp\?:\/\///')
 
 if [ "${EXTERNAL_SYNC,,}" != "true" ] ; then
     echo "INFO: Checking if sentry can be synchronized from the validator node..."
-    while ! ping -c1 validator &>/dev/null; do
+    while ! ping -c1 validator &>/dev/null ; do
       echo "INFO: Waiting for ping response form validator node... ($(date))"
       sleep 5
     done
@@ -47,9 +47,9 @@ if [ ! -f "$EXECUTED_CHECK" ]; then
     DATA_GENESIS="$DATA_DIR/genesis.json"
 
     if [ -f "$DATA_GENESIS" ] ; then
-      echo "INFO: Genesis file was found within the snapshoot folder, attempting recovery..."
+      echo "INFO: Genesis file was found within the snapshot folder, attempting recovery..."
       rm -fv $COMMON_GENESIS
-      cp -v -a $DATA_GENESIS $COMMON_GENESIS # move snapshoot genesis into common folder
+      cp -v -a $DATA_GENESIS $COMMON_GENESIS # move snapshot genesis into common folder
     fi
 
     rm -fv "$SNAP_FILE"

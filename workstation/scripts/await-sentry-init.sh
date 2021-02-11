@@ -36,7 +36,6 @@ while [ $i -le 40 ]; do
         continue
     else
         echoInfo "INFO: Success, container was initialized"
-
     fi
 
     echoInfo "INFO: Awaiting node status..."
@@ -71,7 +70,7 @@ echoInfo "INFO: Printing all $CONTAINER_NAME health logs..."
 docker inspect --format "{{json .State.Health }}" $($KIRA_SCRIPTS/container-id.sh "$CONTAINER_NAME") | jq '.Log[-1].Output' | xargs | sed 's/\\n/\n/g' || echo "INFO: Failed to display $CONTAINER_NAME container health logs"
 
 echoInfo "INFO: Printing $CONTAINER_NAME start logs..."
-cat $COMMON_LOGS/start.log | tail -n 75 || echoWarn "WARNING: Failed to display $CONTAINER_NAME container start logs"
+cat $COMMON_LOGS/start.log | tail -n 150 || echoWarn "WARNING: Failed to display $CONTAINER_NAME container start logs"
 
 if [ "${IS_STARTED,,}" != "true" ] ; then
     echoErr "ERROR: $CONTAINER_NAME was not started sucessfully within defined time"
@@ -102,12 +101,18 @@ fi
 
 if [ "${EXTERNAL_SYNC,,}" == "true" ] && [ "${CONTAINER_NAME,,}" == "sentry" ] ; then
     echoInfo "INFO: External state synchronisation detected, $CONTAINER_NAME must be fully synced before setup can proceed"
-    echoInfo "INFO: Local snapshoot must be created before network can be started"
+    echoInfo "INFO: Local snapshot must be created before network can be started"
 
     while : ; do
         echoInfo "INFO: Awaiting node status..."
         STATUS=$(docker exec -i "$CONTAINER_NAME" sekaid status 2>&1 | jq -rc '.' 2> /dev/null || echo "")
-        ( [ -z "$STATUS" ] || [ "${STATUS,,}" == "null" ] ) && echoErr "ERROR: Node failed, status could not be fetched, your netwok connectivity might have been interrupted" && exit 1
+        if [ -z "$STATUS" ] || [ "${STATUS,,}" == "null" ] ; then
+            cat $COMMON_LOGS/start.log | tail -n 75 || echoWarn "WARNING: Failed to display $CONTAINER_NAME container start logs"
+            echoErr "ERROR: Node failed or status could not be fetched, your netwok connectivity might have been interrupted"
+            SELECT="." && while ! [[ "${SELECT,,}" =~ ^(a|c)$ ]] ; do echoNErr "Do you want to [A]bort or [C]ontinue setup?: " && read -d'' -s -n1 ACCEPT && echo ""; done
+            [ "${SELECT,,}" == "a" ] && echoWarn "WARINIG: Operation was aborted" && sleep 1 && exit 1
+            continue
+        fi
 
         set +x
         SYNCING=$(echo $STATUS | jq -r '.SyncInfo.catching_up' 2> /dev/null || echo "false")
@@ -132,9 +137,9 @@ if [ "${EXTERNAL_SYNC,,}" == "true" ] && [ "${CONTAINER_NAME,,}" == "sentry" ] ;
     echo "INFO: Halting $CONTAINER_NAME container"
     touch $HALT_FILE
     echo "INFO: Re-starting $CONTAINER_NAME container..."
-    $KIRA_SCRIPTS/container-restart.sh
+    $KIRA_SCRIPTS/container-restart.sh $CONTAINER_NAME
     
-    echo "INFO: Creating new snapshoot..."
+    echo "INFO: Creating new snapshot..."
 
     DATA_DIR="$SEKAID_HOME/data"
     LOCAL_GENESIS="$SEKAID_HOME/config/genesis.json"
@@ -153,9 +158,9 @@ if [ "${EXTERNAL_SYNC,,}" == "true" ] && [ "${CONTAINER_NAME,,}" == "sentry" ] ;
     echo "INFO: Un-Halting $CONTAINER_NAME container"
     rm -fv $HALT_FILE
     echo "INFO: Re-starting $CONTAINER_NAME container..."
-    $KIRA_SCRIPTS/container-restart.sh
+    $KIRA_SCRIPTS/container-restart.sh $CONTAINER_NAME
 
-    echo "INFO: New snapshoot was created!"
+    echo "INFO: New snapshot was created!"
     CDHelper text lineswap --insert="VALIDATOR_MIN_HEIGHT=\"$HEIGHT\"" --prefix="VALIDATOR_MIN_HEIGHT=" --path=$ETC_PROFILE --append-if-found-not=True
 fi
 

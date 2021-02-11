@@ -139,7 +139,7 @@ if [ "${SKIP_UPDATE,,}" != "true" ]; then
     rm -rfv $KIRA_DUMP
     mkdir -p "$KIRA_DUMP/INFRA/manager"
 
-    ESSENTIALS_HASH=$(echo "$SETUP_VER-$CDHELPER_VERSION-$KIRA_HOME-$INFRA_BRANCH-$INFRA_REPO-$ARCHITECTURE-4" | md5sum | awk '{ print $1 }' || echo "")
+    ESSENTIALS_HASH=$(echo "$SETUP_VER-$CDHELPER_VERSION-$KIRA_HOME-$INFRA_BRANCH-$INFRA_REPO-$ARCHITECTURE-8" | md5sum | awk '{ print $1 }' || echo "")
     KIRA_SETUP_ESSSENTIALS="$KIRA_SETUP/essentials-$ESSENTIALS_HASH"
     if [ ! -f "$KIRA_SETUP_ESSSENTIALS" ] ; then
         echo "INFO: Installing Essential Packages & Env Variables..."
@@ -147,7 +147,7 @@ if [ "${SKIP_UPDATE,,}" != "true" ]; then
         apt-get update -y
         apt-get install -y --allow-unauthenticated --allow-downgrades --allow-remove-essential --allow-change-held-packages \
             software-properties-common apt-transport-https ca-certificates gnupg curl wget git unzip build-essential \
-            nghttp2 libnghttp2-dev libssl-dev fakeroot dpkg-dev libcurl4-openssl-dev net-tools jq
+            nghttp2 libnghttp2-dev libssl-dev fakeroot dpkg-dev libcurl4-openssl-dev net-tools jq aptitude
 
         ln -s /usr/bin/git /bin/git || echo "WARNING: Git symlink already exists"
         git config --add --global core.autocrlf input || echo "WARNING: Failed to set global autocrlf"
@@ -177,7 +177,7 @@ if [ "${SKIP_UPDATE,,}" != "true" ]; then
 
             if [ "$FILE_HASH" != "$EXPECTED_HASH" ]; then
                 echo -e "\nDANGER: Failed to check integrity hash of the CDHelper tool !!!\nERROR: Expected hash: $EXPECTED_HASH, but got $FILE_HASH\n"
-                SELECT="" && while [ "${SELECT,,}" != "x" ] && [ "${SELECT,,}" != "c" ]; do echo -en "\e[31;1mPress e[X]it or [C]ontinue to disregard the issue\e[0m\c" && read -d'' -s -n1 ACCEPT && echo ""; done
+                SELECT="" && while [ "${SELECT,,}" != "x" ] && [ "${SELECT,,}" != "c" ] ; do echo -en "\e[31;1mPress e[X]it or [C]ontinue to disregard the issue\e[0m\c" && read -d'' -s -n1 ACCEPT && echo ""; done
                 [ "${SELECT,,}" == "x" ] && exit
                 echo "DANGER: You decided to disregard a potential vulnerability !!!"
                 echo -en "\e[31;1mPress any key to continue or Ctrl+C to abort...\e[0m" && read -n 1 -s && echo ""
@@ -204,6 +204,11 @@ if [ "${SKIP_UPDATE,,}" != "true" ]; then
         CDHelper text lineswap --insert="KIRA_SNAP=$KIRA_SNAP" --prefix="KIRA_SNAP=" --path=$ETC_PROFILE --append-if-found-not=True
         CDHelper text lineswap --insert="KIRA_SECRETS=$KIRA_SECRETS" --prefix="KIRA_SECRETS=" --path=$ETC_PROFILE --append-if-found-not=True
         CDHelper text lineswap --insert="KIRA_CONFIGS=$KIRA_CONFIGS" --prefix="KIRA_CONFIGS=" --path=$ETC_PROFILE --append-if-found-not=True
+        CDHelper text lineswap --insert="PUBLIC_PEERS=$KIRA_CONFIGS/public_peers" --prefix="PUBLIC_PEERS=" --path=$ETC_PROFILE --append-if-found-not=True
+        CDHelper text lineswap --insert="PRIVATE_PEERS=$KIRA_CONFIGS/private_peers" --prefix="PRIVATE_PEERS=" --path=$ETC_PROFILE --append-if-found-not=True
+        CDHelper text lineswap --insert="PUBLIC_SEEDS=$KIRA_CONFIGS/public_seeds" --prefix="PUBLIC_SEEDS=" --path=$ETC_PROFILE --append-if-found-not=True
+        CDHelper text lineswap --insert="PRIVATE_SEEDS=$KIRA_CONFIGS/private_seeds" --prefix="PRIVATE_SEEDS=" --path=$ETC_PROFILE --append-if-found-not=True
+        CDHelper text lineswap --insert="LOCAL_GENESIS_PATH=$KIRA_CONFIGS/genesis.json" --prefix="LOCAL_GENESIS_PATH=" --path=$ETC_PROFILE --append-if-found-not=True
 
         CDHelper text lineswap --insert="KIRA_MANAGER=$KIRA_MANAGER" --prefix="KIRA_MANAGER=" --path=$ETC_PROFILE --append-if-found-not=True
         CDHelper text lineswap --insert="KIRA_REPOS=$KIRA_REPOS" --prefix="KIRA_REPOS=" --path=$ETC_PROFILE --append-if-found-not=True
@@ -253,7 +258,14 @@ if [ "${SKIP_UPDATE,,}" != "true" ]; then
     echo "INFO: Init script restart finished."
     exit 0
 else
-    echo "INFO: Skipping init update..."
+    echo "INFO: Skipping init update and cleaning up..."
+    apt-get autoclean || echo "WARNING: autoclean failed"
+    apt-get clean || echo "WARNING: clean failed"
+    apt-get autoremove || echo "WARNING: autoremove failed"
+    journalctl --vacuum-time=3d || echo "WARNING: journalctl vacuum failed"
+
+    # NUCLEAR OPTION (USE ONLY IF YOU ENTIRELY RUN OUT OF SPACE) MAKE SURE YOU RESTART MACHINE BEFORE APPLYING
+    # apt-get remove -y --purge $(dpkg -l 'linux-*' | sed '/^ii/!d;/'"$(uname -r | sed "s/\(.*\)-\([^0-9]\+\)/\1/")"'/d;s/^[^ ]* [^ ]* \([^ ]*\).*/\1/;/[0-9]/!d')
 fi
 
 CDHelper text lineswap --insert="KIRA_USER=$KIRA_USER" --prefix="KIRA_USER=" --path=$ETC_PROFILE --append-if-found-not=True
@@ -270,7 +282,7 @@ CDHelper text lineswap --insert="INTERX_REPO=$INTERX_REPO" --prefix="INTERX_REPO
 
 set +x
 echo "INFO: Your host environment was initialized"
-echo -e "\e[33;1mTERMS & CONDITIONS: Make absolutely sure that you are not running this script on your primary PC operating system, it can cause irreversible data loss and change of firewall rules which might make your system vurnerable to various security threats or entirely lock you out of the system. By proceeding you take full responsibility for your own actions, and accept that you continue on your own risk.\e[0m"
+echo -e "\e[33;1mTERMS & CONDITIONS: Make absolutely sure that you are NOT running this script on your primary PC operating system, it can cause irreversible data loss and change of firewall rules which might make your system vurnerable to various security threats or entirely lock you out of the system. By proceeding you take full responsibility for your own actions and accept that you continue on your own risk. You also acknowledge that malfunction of any software you run might potentially cause irreversible loss of assets due to unforeseen issues and circumstances including but not limited to hardware and/or software faults and/or vulnerabilities.\e[0m"
 echo -en "\e[31;1mPress any key to accept terms & continue or Ctrl+C to abort...\e[0m" && read -n 1 -s && echo ""
 echo "INFO: Launching setup menu..."
 set -x

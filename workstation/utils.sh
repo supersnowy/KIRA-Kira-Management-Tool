@@ -22,6 +22,9 @@ function echoInfo() {
 function echoWarn() {
     echo -e "\e[0m\e[33;1m${1}\e[0m"
 }
+function echoWarning() {
+    echo -e "\e[0m\e[33;1m${1}\e[0m"
+}
 function echoErr() {
     echo -e "\e[0m\e[31;1m${1}\e[0m"
 }
@@ -32,6 +35,14 @@ function echoNInfo() {
 function echoNWarn() {
     echo -en "\e[0m\e[33;1m${1}\e[0m"
 }
+function echoNWarning() {
+    echo -en "\e[0m\e[33;1m${1}\e[0m"
+}
 function echoNErr() {
     echo -en "\e[0m\e[31;1m${1}\e[0m"
+}
+
+# echo command with a line number
+function echol() {
+    grep -n "$1" $0 |  sed "s/echo_line_no//" 
 }

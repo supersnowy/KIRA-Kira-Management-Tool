@@ -20,7 +20,7 @@ echo "|-----------------------------------------------"
 echo "|   NODE ID: $SENTRY_NODE_ID"
 echo "|   NETWORK: $KIRA_SENTRY_NETWORK"
 echo "|  HOSTNAME: $KIRA_SENTRY_DNS"
-echo "| SNAPSHOOT: $KIRA_SNAP_PATH"
+echo "|  SNAPSHOT: $KIRA_SNAP_PATH"
 echo "|   MAX CPU: $CPU_RESERVED / $CPU_CORES"
 echo "|   MAX RAM: $RAM_RESERVED"
 echo "------------------------------------------------"
@@ -35,15 +35,13 @@ echo "INFO: Setting up $CONTAINER_NAME config vars..."
 
 VALIDATOR_SEED=$(echo "${VALIDATOR_NODE_ID}@validator:$DEFAULT_P2P_PORT" | xargs | tr -d '\n' | tr -d '\r')
 PRIV_SENTRY_SEED=$(echo "${PRIV_SENTRY_NODE_ID}@priv_sentry:$KIRA_PRIV_SENTRY_P2P_PORT" | xargs | tr -d '\n' | tr -d '\r')
-CFG_seeds="tcp://$PRIV_SENTRY_SEED,tcp://$VALIDATOR_SEED"
-CFG_persistent_peers=""
 
 mkdir -p "$COMMON_LOGS"
 cp -a -v -f $KIRA_SECRETS/sentry_node_key.json $COMMON_PATH/node_key.json
 
 rm -fv $SNAP_DESTINATION
 if [ -f "$KIRA_SNAP_PATH" ] ; then
-    echo "INFO: State snapshoot was found, cloning..."
+    echo "INFO: State snapshot was found, cloning..."
     cp -a -v -f $KIRA_SNAP_PATH $SNAP_DESTINATION
 fi
 
@@ -62,6 +60,11 @@ rm -f -v "$COMMON_LOGS/start.log" "$COMMON_PATH/executed" "$HALT_FILE"
 if [ "${EXTERNAL_SYNC,,}" == "true" ] ; then 
     echoInfo "INFO: Synchronisation using external genesis file ($LOCAL_GENESIS_PATH) will be performed"
     cp -f -a -v "$KIRA_CONFIGS/genesis.json" "$COMMON_PATH/genesis.json"
+    CFG_seeds="tcp://$PRIV_SENTRY_SEED"
+    CFG_persistent_peers=""
+else
+    CFG_seeds=""
+    CFG_persistent_peers="tcp://$VALIDATOR_SEED"
 fi
 
 echo "INFO: Starting sentry node..."
@@ -85,17 +88,16 @@ docker run -d \
     -e CFG_p2p_laddr="tcp://0.0.0.0:$DEFAULT_P2P_PORT" \
     -e CFG_seeds="$CFG_seeds" \
     -e CFG_persistent_peers="$CFG_persistent_peers" \
-    -e CFG_private_peer_ids="$VALIDATOR_NODE_ID,$SNAPSHOOT_NODE_ID,$SENTRY_NODE_ID,$PRIV_SENTRY_NODE_ID" \
-    -e CFG_unconditional_peer_ids="$VALIDATOR_NODE_ID,$SNAPSHOOT_NODE_ID,$PRIV_SENTRY_NODE_ID" \
+    -e CFG_private_peer_ids="$VALIDATOR_NODE_ID,$SNAPSHOT_NODE_ID,$PRIV_SENTRY_NODE_ID" \
+    -e CFG_unconditional_peer_ids="$VALIDATOR_NODE_ID,$SNAPSHOT_NODE_ID,$PRIV_SENTRY_NODE_ID" \
     -e CFG_addr_book_strict="false" \
     -e CFG_seed_mode="false" \
     -e CFG_version="v2" \
     -e CFG_cors_allowed_origins="*" \
-    -e CFG_max_num_outbound_peers="100" \
-    -e CFG_max_num_inbound_peers="10" \
+    -e CFG_max_num_outbound_peers="32" \
+    -e CFG_max_num_inbound_peers="8" \
     -e NODE_TYPE=$CONTAINER_NAME \
     -e EXTERNAL_SYNC="$EXTERNAL_SYNC" \
-    -e VALIDATOR_MIN_HEIGHT="$VALIDATOR_MIN_HEIGHT" \
     -v $COMMON_PATH:/common \
     -v $KIRA_SNAP:/snap \
     kira:latest
