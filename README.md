@@ -77,16 +77,16 @@ First, the following command adds a new validator's key `val2`.
 sekaid keys add val2 --keyring-backend=test --home=$SEKAID_HOME
 ```
 
-Next, the following command whitelists `PermCreateSetPermissionsProposal` (defined as `4`) permission of the `validator`. This permission should be whitelisted to create a proposal. (Please replace `testing` with your chain id)
+Next, the following command whitelists `PermCreateSetPermissionsProposal` (defined as `4`) permission of the `validator`. This permission should be whitelisted to create a proposal.
 
 ```
-sekaid tx customgov permission whitelist-permission --from validator --keyring-backend=test --permission=4 --addr=$(sekaid keys show -a validator --keyring-backend=test --home=$SEKAID_HOME) --chain-id=testing --fees=100ukex --home=$SEKAID_HOME --yes
+sekaid tx customgov permission whitelist-permission --from validator --keyring-backend=test --permission=4 --addr=$(sekaid keys show -a validator --keyring-backend=test --home=$SEKAID_HOME) --chain-id=$NETWORK_NAME --fees=100ukex --home=$SEKAID_HOME --yes
 ```
 
 The following command creates a proposal that adds a new validator `val2`.
 
 ```
-sekaid tx customgov proposal assign-permission 2 --addr=$(sekaid keys show -a val2 --keyring-backend=test --home=$SEKAID_HOME) --from=validator --keyring-backend=test --home=$SEKAID_HOME --chain-id=testing --fees=100ukex --yes
+sekaid tx customgov proposal assign-permission 2 --addr=$(sekaid keys show -a val2 --keyring-backend=test --home=$SEKAID_HOME) --from=validator --keyring-backend=test --home=$SEKAID_HOME --chain-id=$NETWORK_NAME --fees=100ukex --yes
 ```
 
 Then, we can check if the proposal is created or not with the following command.
@@ -100,13 +100,13 @@ sekaid query customgov proposals
 First, the `PermVoteSetPermissionProposal` (defined as `5`) permission should be whitelisted on `validator` to participate on the vote. The following command whitelists `PermVoteSetPermissionProposal` permission of the `validator`.
 
 ```
-sekaid tx customgov permission whitelist-permission --from validator --keyring-backend=test --permission=5 --addr=$(sekaid keys show -a validator --keyring-backend=test --home=$SEKAID_HOME) --chain-id=testing --fees=100ukex --home=$SEKAID_HOME --yes
+sekaid tx customgov permission whitelist-permission --from validator --keyring-backend=test --permission=5 --addr=$(sekaid keys show -a validator --keyring-backend=test --home=$SEKAID_HOME) --chain-id=$NETWORK_NAME --fees=100ukex --home=$SEKAID_HOME --yes
 ```
 
 Then, we can vote on a proposal with the following command. Here, we assume the proposal's id is `1`.
 
 ```
-sekaid tx customgov proposal vote 1 1 --from validator --keyring-backend=test --home=$SEKAID_HOME --chain-id=testing --fees=100ukex --yes
+sekaid tx customgov proposal vote 1 1 --from validator --keyring-backend=test --home=$SEKAID_HOME --chain-id=$NETWORK_NAME --fees=100ukex --yes
 ```
 
 ### - How to create a validator after proposal passed
@@ -120,7 +120,7 @@ validatorKey=$(sekaid val-address $(sekaid keys show -a val2 --keyring-backend=t
 Then, let's claim the validator seat which performs to create a validator `val2`.
 
 ```
-sekaid tx claim-validator-seat --from val2 --keyring-backend=test --home=$SEKAID_HOME --validator-key=$validatorKey --moniker="validator" --chain-id=testing --fees=100ukex --yes
+sekaid tx claim-validator-seat --from val2 --keyring-backend=test --home=$SEKAID_HOME --validator-key=$validatorKey --moniker="validator" --chain-id=$NETWORK_NAME --fees=100ukex --yes
 ```
 
 ### - How to make token transactions in different currencies
@@ -130,13 +130,13 @@ Let's add a new token (stake token) as fee currency. After that, we can make tok
 First, we should whitelist `PermUpsertTokenRate` (defined as `8`) permission to a validator to create a proposal that registers new token.
 
 ```
-sekaid tx customgov permission whitelist-permission --from validator --keyring-backend=test --permission=8 --addr=$(sekaid keys show -a validator --keyring-backend=test --home=$SEKAID_HOME) --chain-id=testing --fees=100ukex --home=$SEKAID_HOME --yes
+sekaid tx customgov permission whitelist-permission --from validator --keyring-backend=test --permission=8 --addr=$(sekaid keys show -a validator --keyring-backend=test --home=$SEKAID_HOME) --chain-id=$NETWORK_NAME --fees=100ukex --home=$SEKAID_HOME --yes
 ```
 
 Then, the following command registers the `stake` token as fee currency. (1ukex=100stake)
 
 ```
-sekaid tx tokens upsert-rate --from validator --keyring-backend=test --denom="stake" --rate="0.01" --fee_payments=true --chain-id=testing --fees=100ukex --home=$SEKAID_HOME --yes
+sekaid tx tokens upsert-rate --from validator --keyring-backend=test --denom="stake" --rate="0.01" --fee_payments=true --chain-id=$NETWORK_NAME --fees=100ukex --home=$SEKAID_HOME --yes
 ```
 
 You can query the `stake` token's rate with the following command.
@@ -148,22 +148,22 @@ sekaid query tokens rate stake
 Try to spend `stake` token as fee with the following commands. You can see the `--fees` flag is set as `10000stake`
 
 ```
-sekaid tx tokens upsert-rate --from validator --keyring-backend=test --denom="valstake" --rate="0.01" --fee_payments=true --chain-id=testing --fees=10000stake --home=$SEKAID_HOME --yes
+sekaid tx tokens upsert-rate --from validator --keyring-backend=test --denom="valstake" --rate="0.01" --fee_payments=true --chain-id=$NETWORK_NAME --fees=10000stake --home=$SEKAID_HOME --yes
 ```
 
 ### - How to create a proposal to create an upsert token alias
 
 ```
-sekaid tx tokens proposal-upsert-alias --from validator --denoms="stake" --fee_payments=true --chain-id=testing --keyring-backend=test --fees=100ukex --home=$SEKAID_HOME --yes
+sekaid tx tokens proposal-upsert-alias --from validator --denoms="stake" --fee_payments=true --chain-id=$NETWORK_NAME --keyring-backend=test --fees=100ukex --home=$SEKAID_HOME --yes
 ```
 
 ### - How to modify how long the proposal take
 
 To modify how long the proposal take, we need to update the network property (`ProposalEndTime`, defined as `3`)
-We need to create a proposal `set-network-property` for updating network properties. The following command sets Proposal endtime to be 10. (Please replace `testing` with your chain id)
+We need to create a proposal `set-network-property` for updating network properties. The following command sets Proposal endtime to be 10.
 
 ```
-sekaid tx customgov proposal set-network-property PROPOSAL_END_TIME 10 --from validator --keyring-backend=test --chain-id=testing --home=$SEKAID_HOME --fees=100ukex --yes
+sekaid tx customgov proposal set-network-property PROPOSAL_END_TIME 10 --from validator --keyring-backend=test --chain-id=$NETWORK_NAME --home=$SEKAID_HOME --fees=100ukex --yes
 ```
 
 Then, we can check if the proposal is created or not with the following command.
@@ -175,7 +175,7 @@ sekaid query customgov proposals
 After that, we can vote on a proposal with the following command. Here, we assume the proposal's id is `1`.
 
 ```
-sekaid tx customgov proposal vote 1 1 --from validator --keyring-backend=test --home=$SEKAID_HOME --chain-id=testing --fees=100ukex --yes
+sekaid tx customgov proposal vote 1 1 --from validator --keyring-backend=test --home=$SEKAID_HOME --chain-id=$NETWORK_NAME --fees=100ukex --yes
 ```
 
 Finally, let's make sure if the proposal end time is updated.
@@ -189,5 +189,5 @@ sekaid query customgov network-properties
 The following command claims the validator as a governance actor. By the way, the first validator is automatically a governance actor.
 
 ```
-sekaid tx customgov councilor claim-seat --from validator --address=$(sekaid keys show -a validator --keyring-backend=test --home=$SEKAID_HOME) --keyring-backend=test  --chain-id=testing --home=$SEKAID_HOME --fees=100ukex --yes
+sekaid tx customgov councilor claim-seat --from validator --address=$(sekaid keys show -a validator --keyring-backend=test --home=$SEKAID_HOME) --keyring-backend=test  --chain-id=$NETWORK_NAME --home=$SEKAID_HOME --fees=100ukex --yes
 ```
