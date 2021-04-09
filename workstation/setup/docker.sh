@@ -9,6 +9,8 @@ VERSION=$(docker -v || echo "error")
 SETUP_CHECK="$KIRA_SETUP/docker-v0.0.11" 
 if [ ! -f "$SETUP_CHECK" ] || [ "${VERSION,,}" == "error" ] || [ "${ACTIVE,,}" != "active" ] ; then
     echo "INFO: Attempting to remove old docker..."
+    docker network prune -f || echo "WARNINGL Failed to prune networks"
+    ip link show | grep br- | awk -F ':' '{print $2}' | tr -d ' ' | while read b; do sudo ip link set "$b" down; sudo brctl delbr "$b"; done || echo "WARNINIG: Failed to delete all bridge interfaces"
     service docker stop || echo "WARNING: Failed to stop docker servce"
     apt remove --purge docker -y || echo "WARNING: Failed to remove docker"
     apt remove --purge containerd -y || echo "WARNING: Failed to remove containerd"
